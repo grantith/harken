@@ -1,3 +1,4 @@
+; Config loading + schema validation + normalization.
 LoadConfig(config_path, default_config := Map()) {
     config := CloneMap(default_config)
     errors := []

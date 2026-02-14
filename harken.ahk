@@ -1,4 +1,5 @@
 #Requires AutoHotkey v2.0
+; Entry point: loads config, initializes modules, registers hotkeys.
 #SingleInstance
 
 #Include src/lib/JXON.ahk

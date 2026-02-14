@@ -1,3 +1,4 @@
+; Window walker hotkey binding.
 global Config
 
 if Config.Has("window_selector") && Config["window_selector"]["enabled"] {

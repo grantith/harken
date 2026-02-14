@@ -1,5 +1,6 @@
 #Requires AutoHotkey v2.0
 
+; Window inspector UI for titles/classes/PIDs.
 ShowWindowInspector() {
     static inspector_gui := ""
     static window_list := ""
@@ -15,6 +16,7 @@ ShowWindowInspector() {
     inspector_gui := Gui("+Resize", "harken Window Inspector")
     inspector_gui.SetFont("s10", "Segoe UI")
 
+    ; Include active column and auto-refresh to reflect focus changes.
     window_list := inspector_gui.AddListView("w1020 r26 Grid", ["Active", "Title", "Exe", "Class", "PID", "HWND"])
     window_list.ModifyCol(1, 60)
     window_list.ModifyCol(2, 380)

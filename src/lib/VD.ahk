@@ -1,5 +1,6 @@
 #requires AutoHotkey v2.1-alpha.5
 
+; Third-party: Virtual desktop COM wrapper. See LICENSES/VD.ahk-LICENSE.md
 class VD {
     class Array {
         static find(arr, callback) {

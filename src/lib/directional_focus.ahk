@@ -1,3 +1,4 @@
+; Directional focus calculations and stacked cycling.
 global Config
 global directional_focus_history := Map()
 global directional_focus_debug_enabled := false

@@ -1,4 +1,5 @@
 global Config, AppState
+; Command overlay UI + helper toggle state.
 global command_helper_enabled := false
 global command_toast_gui := ""
 global command_toast_text := ""

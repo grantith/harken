@@ -1,3 +1,4 @@
+; Unbound hotkey helper + reserved key detection.
 global Config
 
 RegisterUnboundHotkeys() {

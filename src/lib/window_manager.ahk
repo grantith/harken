@@ -16,6 +16,7 @@
 global Config
 
 
+; Window manager utilities: grid math, move/resize, exceptions.
 class Window
 {
     ;-------------------------------------------------------------------------------

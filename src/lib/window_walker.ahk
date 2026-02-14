@@ -1,5 +1,6 @@
 global Config
 
+; Window selector UI (fuzzy list + activation).
 class WindowWalker
 {
     static gui := ""

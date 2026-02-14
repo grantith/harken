@@ -1,5 +1,6 @@
 #Include %A_LineFile%\..\VD.ahk
 
+; Virtual desktop integration (tray indicator, auto-assign, helpers).
 VirtualDesktopEnabled() {
     global Config
     if !IsSet(Config)

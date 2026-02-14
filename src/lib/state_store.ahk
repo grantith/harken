@@ -13,6 +13,7 @@ LoadState() {
     return Map()
 }
 
+; Persist small runtime state (overlay toggle, etc.).
 SaveState(state) {
     if !(state is Map)
         return

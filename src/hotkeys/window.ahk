@@ -5,6 +5,7 @@ move_step := Config["window"]["move_step"]
 super_double_tap_ms := Config["window"]["super_double_tap_ms"]
 move_mode_enabled := Config["window"]["move_mode"]["enable"]
 move_mode_cancel_key := Config["window"]["move_mode"]["cancel_key"]
+; Window hotkeys (resize/move/cycle) and virtual desktop bindings.
 center_cycle_hotkey := Config["window"]["center_width_cycle_hotkey"]
 cycle_app_windows_hotkey := Config["window"]["cycle_app_windows_hotkey"]
 cycle_app_windows_current_hotkey := Config["window"]["cycle_app_windows_current_hotkey"]

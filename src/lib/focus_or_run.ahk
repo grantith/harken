@@ -1,4 +1,5 @@
 ; Helper: focus existing window, otherwise run app.
+; Launch-or-focus helpers + per-app matching.
 ; If the target window is already active, toggle back to the previous window
 ; recorded for this hotkey.
 FocusOrRun(winTitle, exePath, hotkey_id, app_config := "", *) {
