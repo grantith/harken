@@ -2,8 +2,10 @@ config_version = 1
 # Use one or more keys as super (CapsLock is the default).
 super_key = ["F24", "CapsLock"]
 
-[[apps]]
-id = "browser"
+[apps]
+# Named tables: key is the app id; do not set `id` inside.
+
+[apps.browser]
 hotkey = "f"
 win_title = "ahk_exe floorp.exe"
 run = "floorp"
@@ -11,37 +13,32 @@ run = "floorp"
 # follow_on_spawn = true
 run_paths = []
 
-[[apps]]
-id = "files"
+[apps.files]
 hotkey = "e"
 win_title = "ahk_exe explorer.exe"
 run = "explorer"
 run_paths = []
 
-[[apps]]
-id = "editor"
+[apps.editor]
 hotkey = "v"
 win_title = "ahk_exe Code.exe"
 run = "code"
 # run_start_in = "C:\\projects"
 run_paths = []
 
-[[apps]]
-id = "terminal"
+[apps.terminal]
 hotkey = "s"
 win_title = "ahk_exe WindowsTerminal.exe"
 run = "wt"
 run_paths = []
 
-[[apps]]
-id = "notepad"
+[apps.notepad]
 hotkey = "n"
 win_title = "ahk_exe notepad++.exe"
 run = "notepad++"
 run_paths = []
 
-[[apps]]
-id = "chat"
+[apps.chat]
 hotkey = "t"
 win_title = "ahk_exe telegram.exe"
 run = "telegram"
@@ -49,19 +46,17 @@ run_paths = []
 # desktop = 2
 # ignore_classes = ["Qt51518QWindowToolSaveBits"]
 
-[[apps]]
-id = "discord"
+[apps.discord]
 hotkey = "d"
 win_title = "ahk_exe discord.exe"
 run = "discord"
 run_paths = []
 # desktop = 2
 
-[[apps]]
-id = "vscode-border"
+[apps.vscode-border]
 match = { exe = "Code.exe", title = " - Visual Studio Code$", title_regex = true }
 # Optional per-app focus border tweaks.
-focus_border = { border_color = "#4D96FF", border_thickness = 3, corner_radius = 12lll }
+focus_border = { border_color = "#4D96FF", border_thickness = 3, corner_radius = 12 }
 
 [[global_hotkeys]]
 enabled = true

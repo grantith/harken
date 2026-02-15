@@ -20,6 +20,7 @@ LoadConfig(config_path, default_config := Map()) {
 
     NormalizeSuperKeyConfig(config)
     NormalizeVirtualDesktopConfig(config)
+    NormalizeAppsConfig(config, errors)
     ValidateConfig(config, ConfigSchema(), errors, warnings)
     ValidateSuperKeys(config, errors)
     ValidateApps(config, errors)
@@ -178,6 +179,36 @@ NormalizeSuperKeyConfig(config) {
     super_value := config["super_key"]
     if (super_value is String)
         config["super_key"] := [super_value]
+}
+
+NormalizeAppsConfig(config, errors) {
+    if !config.Has("apps")
+        return
+
+    apps := config["apps"]
+    if (apps is Array)
+        return
+
+    if !(apps is Map) {
+        errors.Push("config.apps should be an array or object")
+        return
+    }
+
+    normalized := []
+    for app_id, app_config in apps {
+        if !(app_config is Map) {
+            errors.Push("config.apps." app_id " should be an object")
+            continue
+        }
+        if app_config.Has("id") {
+            errors.Push("config.apps." app_id " should not set id when using named tables")
+            app_config.Delete("id")
+        }
+        app_config["id"] := app_id
+        normalized.Push(app_config)
+    }
+
+    config["apps"] := normalized
 }
 
 
