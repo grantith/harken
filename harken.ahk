@@ -18,10 +18,16 @@ EnsureConfigExists(config_path, DefaultConfig())
 config_result := LoadConfig(config_path, DefaultConfig())
 global Config := config_result["config"]
 config_errors := config_result["errors"]
+config_warnings := config_result["warnings"]
 if (config_errors.Length) {
     appdata_dir := GetAppDataDir()
     LogConfigErrors(config_errors, appdata_dir "\config.errors.log", config_path)
     return
+}
+if (config_warnings.Length) {
+    appdata_dir := GetAppDataDir()
+    LogConfigWarnings(config_warnings, appdata_dir "\config.warnings.log", config_path)
+    ShowConfigWarnings(config_warnings, appdata_dir "\config.warnings.log")
 }
 InitVirtualDesktop()
 global AppState := LoadState()
@@ -189,6 +195,47 @@ LogConfigErrors(errors, log_path, config_path := "") {
     }
 
     ShowConfigErrorsGui(details, log_path)
+}
+
+LogConfigWarnings(warnings, log_path, config_path := "") {
+    DirCreate(GetAppDataDir())
+    header := "[" A_Now "] Config warnings:" "`n"
+    FileAppend(header, log_path)
+    if (config_path != "")
+        FileAppend("Config: " config_path "`n", log_path)
+    for _, warning in warnings {
+        FileAppend("- " warning "`n", log_path)
+    }
+    FileAppend("`n", log_path)
+}
+
+ShowConfigWarnings(warnings, log_path) {
+    static warning_gui := ""
+    if warning_gui {
+        warning_gui.Destroy()
+        warning_gui := ""
+    }
+
+    warning_gui := Gui("+AlwaysOnTop +ToolWindow", "Harken Config Warnings")
+    warning_gui.SetFont("s10", "Segoe UI")
+    warning_gui.AddText("xm", "Unknown config keys detected. See log for details.")
+
+    preview := ""
+    max_lines := 8
+    for i, warning in warnings {
+        if (i > max_lines) {
+            preview .= "..." "`n"
+            break
+        }
+        preview .= warning "`n"
+    }
+    warning_gui.AddEdit("xm w520 r" max_lines " ReadOnly", preview)
+
+    open_btn := warning_gui.AddButton("xm y+10 w120", "Open Log")
+    open_btn.OnEvent("Click", (*) => Run(log_path))
+    close_btn := warning_gui.AddButton("x+10 yp w120", "Close")
+    close_btn.OnEvent("Click", (*) => warning_gui.Destroy())
+    warning_gui.Show()
 }
 
 ShowConfigErrorsGui(details, log_path) {

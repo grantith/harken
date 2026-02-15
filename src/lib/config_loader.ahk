@@ -2,6 +2,7 @@
 LoadConfig(config_path, default_config := Map()) {
     config := CloneMap(default_config)
     errors := []
+    warnings := []
 
     if FileExist(config_path) {
         try {
@@ -11,21 +12,23 @@ LoadConfig(config_path, default_config := Map()) {
             errors.Push("config.parse: " err.Message)
             return Map(
                 "config", config,
-                "errors", errors
+                "errors", errors,
+                "warnings", warnings
             )
         }
     }
 
     NormalizeSuperKeyConfig(config)
     NormalizeVirtualDesktopConfig(config)
-    errors := ValidateConfig(config, ConfigSchema())
+    ValidateConfig(config, ConfigSchema(), errors, warnings)
     ValidateSuperKeys(config, errors)
     ValidateApps(config, errors)
     ValidateVirtualDesktopHotkeys(config, errors)
 
     return Map(
         "config", config,
-        "errors", errors
+        "errors", errors,
+        "warnings", warnings
     )
 }
 
@@ -164,10 +167,8 @@ ConfigSchema() {
     )
 }
 
-ValidateConfig(config, schema) {
-    errors := []
-    ValidateNode(config, schema, "config", errors)
-    return errors
+ValidateConfig(config, schema, errors, warnings) {
+    ValidateNode(config, schema, "config", errors, warnings)
 }
 
 NormalizeSuperKeyConfig(config) {
@@ -299,12 +300,12 @@ ValidateVirtualDesktopHotkeys(config, errors) {
     }
 }
 
-ValidateNode(value, spec, path, errors) {
+ValidateNode(value, spec, path, errors, warnings) {
     if (spec is Map) {
         if spec.Has("__optional__") {
             if (value = "")
                 return
-            return ValidateNode(value, spec["spec"], path, errors)
+            return ValidateNode(value, spec["spec"], path, errors, warnings)
         }
         if !(value is Map) {
             errors.Push(path " should be an object")
@@ -321,13 +322,13 @@ ValidateNode(value, spec, path, errors) {
 
         for key, val in value {
             if !spec.Has(key) {
-                errors.Push(path "." key " is unknown")
+                warnings.Push(path "." key " is unknown")
                 continue
             }
             if (spec[key] is Map && spec[key].Has("__optional__") && spec[key]["__optional__"]) {
-                ValidateNode(val, spec[key]["spec"], path "." key, errors)
+                ValidateNode(val, spec[key]["spec"], path "." key, errors, warnings)
             } else {
-                ValidateNode(val, spec[key], path "." key, errors)
+                ValidateNode(val, spec[key], path "." key, errors, warnings)
             }
         }
         return
@@ -342,7 +343,7 @@ ValidateNode(value, spec, path, errors) {
             return
         item_spec := spec[1]
         for i, item in value {
-            ValidateNode(item, item_spec, path "[" i "]", errors)
+            ValidateNode(item, item_spec, path "[" i "]", errors, warnings)
         }
         return
     }
