@@ -210,6 +210,32 @@ FilterWindowList(exe, list) {
     return filtered
 }
 
+FilterExcludedCycleWindows(list, app_config := "") {
+    if !(app_config is Map)
+        return list
+    if !app_config.Has("exclude_titles") || !(app_config["exclude_titles"] is Array)
+        return list
+
+    filtered := []
+    for _, id in list {
+        if !AppConfigExcludesTitle(app_config, id)
+            filtered.Push(id)
+    }
+    return filtered
+}
+
+FilterAppConfigCycleWindows(list, app_config := "") {
+    if !(app_config is Map)
+        return list
+
+    filtered := []
+    for _, id in list {
+        if AppConfigMatchesWindow(app_config, id)
+            filtered.Push(id)
+    }
+    return filtered
+}
+
 ApplyDesktopCyclePreference(list, current_only := false) {
     if !VirtualDesktopEnabled()
         return list
@@ -616,9 +642,21 @@ CycleAppWindows(*) {
     if !exe
         return
 
-    win_list := GetWindowsAcrossDesktops("ahk_exe " exe)
+    app_config := FindAppConfigByWindow(hwnd)
+    if (app_config is Map && AppConfigExcludesTitle(app_config, hwnd))
+        return
+
+    win_list := []
+    if (app_config is Map) {
+        win_title := app_config.Has("win_title") ? app_config["win_title"] : ""
+        win_list := GetAppWindowList(win_title, app_config)
+    } else {
+        win_list := GetWindowsAcrossDesktops("ahk_exe " exe)
+    }
     win_list := FilterWindowList(exe, win_list)
     win_list := BuildCycleWindowList(exe, win_list)
+    win_list := FilterAppConfigCycleWindows(win_list, app_config)
+    win_list := FilterExcludedCycleWindows(win_list, app_config)
     if (win_list.Length < 2)
         return
 
@@ -670,9 +708,21 @@ CycleAppWindowsCurrent(*) {
     if !exe
         return
 
-    win_list := GetWindowsAcrossDesktops("ahk_exe " exe)
+    app_config := FindAppConfigByWindow(hwnd)
+    if (app_config is Map && AppConfigExcludesTitle(app_config, hwnd))
+        return
+
+    win_list := []
+    if (app_config is Map) {
+        win_title := app_config.Has("win_title") ? app_config["win_title"] : ""
+        win_list := GetAppWindowList(win_title, app_config)
+    } else {
+        win_list := GetWindowsAcrossDesktops("ahk_exe " exe)
+    }
     win_list := FilterWindowList(exe, win_list)
     win_list := BuildCycleWindowList(exe, win_list)
+    win_list := FilterAppConfigCycleWindows(win_list, app_config)
+    win_list := FilterExcludedCycleWindows(win_list, app_config)
     if (win_list.Length < 2)
         return
 
@@ -812,7 +862,6 @@ Hotkey("^j", (*) => MoveActiveWindow(0, move_step))
 Hotkey("^k", (*) => MoveActiveWindow(0, -move_step))
 HotIf IsSuperKeyPressed
 Hotkey("m", ToggleMaximize)
-Hotkey("q", CloseWindow)
 Hotkey(cycle_app_windows_hotkey, CycleAppWindows)
 if (cycle_app_windows_current_hotkey != "")
     Hotkey(cycle_app_windows_current_hotkey, CycleAppWindowsCurrent)
@@ -820,6 +869,8 @@ RegisterSuperComboHotkey("/", (*) => ShowCommandToastTemporary())
 if (minimize_others_hotkey != "")
     Hotkey(minimize_others_hotkey, MinimizeOtherWindows)
 HotIf
+
+Hotkey("!q", CloseWindow)
 
 HotIf (*) => IsSuperKeyPressed() && IsAltPressed() && !GetKeyState("Shift", "P")
 if (vd_prev_hotkey != "")

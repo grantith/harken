@@ -36,20 +36,35 @@ FocusOrRun(winTitle, exePath, hotkey_id, app_config := "", *) {
 
 GetAppWindowList(win_title, app_config := "") {
     if (app_config is Map && app_config.Has("match") && app_config["match"] is Map) {
-        return GetWindowsByMatch(app_config["match"])
+        return GetWindowsByMatch(app_config["match"], app_config)
     }
     if !win_title
         return []
-    return GetWindowsAcrossDesktops(win_title)
+    return FilterExcludedWindows(GetWindowsAcrossDesktops(win_title), app_config)
 }
 
-GetWindowsByMatch(match) {
+GetWindowsByMatch(match, app_config := "") {
     matches := []
     for _, hwnd in GetWindowsAcrossDesktops() {
-        if MatchWindowFields(match, hwnd)
+        if MatchWindowFields(match, hwnd) && !AppConfigExcludesTitle(app_config, hwnd)
             matches.Push(hwnd)
     }
     return matches
+}
+
+FilterExcludedWindows(hwnds, app_config := "") {
+    if !(app_config is Map)
+        return hwnds
+    if !app_config.Has("exclude_titles") || !(app_config["exclude_titles"] is Array)
+        return hwnds
+
+    filtered := []
+    for _, hwnd in hwnds {
+        if !AppConfigExcludesTitle(app_config, hwnd)
+            filtered.Push(hwnd)
+    }
+
+    return filtered
 }
 
 PickFocusableAppWindow(hwnds, win_title) {

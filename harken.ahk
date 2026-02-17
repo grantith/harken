@@ -49,6 +49,7 @@ Hotkey("r", (*) => ExecuteCommand(() => Reload()))
 Hotkey("i", (*) => ExecuteCommand(OpenWindowInspector))
 Hotkey("n", (*) => ExecuteCommand(ToggleCommandHelper))
 Hotkey("w", (*) => ExecuteCommand(OpenNewWindowForActiveApp))
+Hotkey("g", (*) => ExecuteCommand(ReapplyDesktopAssignments))
 Hotkey("e", (*) => ExecuteCommand(OpenConfigFile))
 Hotkey("Esc", ClearReloadMode)
 HotIf
@@ -74,10 +75,10 @@ DefaultConfig() {
         "config_version", 1,
         "super_key", ["CapsLock"],
         "apps", [
-            Map("id", "files", "hotkey", "e", "win_title", "ahk_exe explorer.exe", "run", "explorer"),
-            Map("id", "editor", "hotkey", "v", "win_title", "ahk_exe Code.exe", "run", "code"),
-            Map("id", "terminal", "hotkey", "s", "win_title", "ahk_exe WindowsTerminal.exe", "run", "wt"),
-            Map("id", "notes", "hotkey", "n", "win_title", "ahk_exe notepad++.exe", "run", "notepad++")
+            Map("id", "files", "hotkey", "e", "win_title", "ahk_exe explorer.exe", "exclude_titles", [], "run", "explorer"),
+            Map("id", "editor", "hotkey", "v", "win_title", "ahk_exe Code.exe", "exclude_titles", [], "run", "code"),
+            Map("id", "terminal", "hotkey", "s", "win_title", "ahk_exe WindowsTerminal.exe", "exclude_titles", [], "run", "wt"),
+            Map("id", "notes", "hotkey", "n", "win_title", "ahk_exe notepad++.exe", "exclude_titles", [], "run", "notepad++")
         ],
         "global_hotkeys", [
             Map(
@@ -459,6 +460,9 @@ MatchAppWindow(app, hwnd := 0) {
     if !hwnd
         return false
 
+    if AppConfigExcludesTitle(app, hwnd)
+        return false
+
     if app.Has("match") && (app["match"] is Map)
         return MatchWindowFields(app["match"], hwnd)
 
@@ -467,6 +471,30 @@ MatchAppWindow(app, hwnd := 0) {
         try active_hwnd := WinGetID("A")
         if (active_hwnd && hwnd = active_hwnd)
             return WinActive(app["win_title"])
+    }
+
+    return false
+}
+
+AppConfigExcludesTitle(app, hwnd) {
+    ; Exclude helper windows that should not be matched to an app.
+    if !(app is Map)
+        return false
+    if !app.Has("exclude_titles") || !(app["exclude_titles"] is Array)
+        return false
+
+    title := ""
+    try title := WinGetTitle("ahk_id " hwnd)
+    catch
+        return false
+
+    for _, pattern in app["exclude_titles"] {
+        if (pattern = "")
+            continue
+        if !RegExMatch(pattern, "^\(\?i\)")
+            pattern := "(?i)" pattern
+        if RegExMatch(title, pattern)
+            return true
     }
 
     return false

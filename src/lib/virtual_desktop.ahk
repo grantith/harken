@@ -124,7 +124,58 @@ TryAutoAssignWindow(hwnd) {
     }
 }
 
+ReapplyDesktopAssignments(*) {
+    if !VirtualDesktopEnabled()
+        return
+    win_list := GetWindowsAcrossDesktops()
+    for _, hwnd in win_list
+        EnforceAppDesktopAssignment(hwnd)
+}
+
+EnforceAppDesktopAssignment(hwnd) {
+    if !WindowExistsAcrossDesktops(hwnd)
+        return false
+    try ex_style := WinGetExStyle("ahk_id " hwnd)
+    catch
+        return false
+    if (ex_style & 0x80) || (ex_style & 0x08000000)
+        return false
+
+    for _, app in Config["apps"] {
+        if !(app is Map)
+            continue
+        if !app.Has("desktop")
+            continue
+        if !AppConfigMatchesWindow(app, hwnd)
+            continue
+        if AppConfigIgnoresWindow(app, hwnd)
+            continue
+        target_desktop := app["desktop"]
+        if (target_desktop <= 0)
+            return false
+
+        assigned_desktop := GetWindowDesktopNum(hwnd)
+        if (assigned_desktop = target_desktop)
+            return true
+
+        total := VD.getCount()
+        if (target_desktop > total) {
+            ; Ensure the destination desktop exists before moving the window.
+            VD.createUntil(target_desktop)
+            VD.IVirtualDesktopListChanged()
+            total := VD.getCount()
+        }
+        if (target_desktop > total)
+            return false
+        VD.MoveWindowToDesktopNum("ahk_id " hwnd, target_desktop, false)
+        return true
+    }
+    return false
+}
+
 AppConfigMatchesWindow(app, hwnd) {
+    if AppConfigExcludesTitle(app, hwnd)
+        return false
     if app.Has("match") && (app["match"] is Map)
         return MatchWindowFields(app["match"], hwnd)
 

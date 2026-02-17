@@ -51,6 +51,7 @@ hotkey = "d"
 win_title = "ahk_exe discord.exe"
 run = "discord"
 run_paths = []
+# exclude_titles = ["^Discord Updater$", "^Discord Canary$"]
 # desktop = 2
 
 [apps.vscode-border]

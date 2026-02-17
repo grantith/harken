@@ -80,6 +80,7 @@ Enter Command Mode with `super + ;`.
 - `r` to reload program/config
 - `e` to open config file
 - `w` opens a new window for the active program, if the program supports it
+- `g` reapply app desktop assignments
 - `n` toggles the command overlay on or off
 - `i` opens the [Helper Utility](#helper-utility)
 
@@ -101,6 +102,21 @@ Enter Command Mode with `super + ;`.
 - Press `e` to open the config file. You can also find it manually in `~/.config/harken/harken.toml` as it will be created on first run.
 - After making changes to your config you can reload (the entire program) with `r` while in command mode.
 
+## Window Matching
+
+App entries under `apps` can match windows via `win_title` or a `match` map. The `match` map accepts
+`exe`, `class`, and `title`, plus `*_regex = true` to treat the value as a regex.
+
+Use `exclude_titles` to ignore specific window titles for a given app. Each entry is a regex pattern
+and the match is case-insensitive unless you include your own `(?i)` prefix.
+
+```toml
+[apps.editor]
+hotkey = "v"
+match = { exe = "Code.exe", title = " - Visual Studio Code$", title_regex = true }
+exclude_titles = ["^Settings$", "^Welcome$"]
+```
+
 ### All default keybindings
 
 #### Window management (Super)
@@ -113,7 +129,7 @@ Enter Command Mode with `super + ;`.
 | `super + shift + c` | Cycle app windows on current desktop |
 | `super + space` | Center width cycle |
 | `super + m` | Maximize/un-maximize |
-| `super + q` | Close window |
+| `alt + q` | Close window |
 | `super + Left/Right/Up/Down` | Resize window and snap to grids |
 | `super + shift + h/j/k/l` | Resize centered |
 | `super + ctrl + h/j/k/l` | Move window |
