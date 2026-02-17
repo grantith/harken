@@ -105,7 +105,8 @@ Enter Command Mode with `super + ;`.
 ## Window Matching
 
 App entries under `apps` can match windows via `win_title` or a `match` map. The `match` map accepts
-`exe`, `class`, and `title`, plus `*_regex = true` to treat the value as a regex.
+`exe`, `class`, and `title`, plus `*_regex = true` to treat the value as a regex. You can also match
+by process tree with `match.process_tree`, which checks for ancestor/descendant executables.
 
 Use `exclude_titles` to ignore specific window titles for a given app. Each entry is a regex pattern
 and the match is case-insensitive unless you include your own `(?i)` prefix.
@@ -116,6 +117,23 @@ hotkey = "v"
 match = { exe = "Code.exe", title = " - Visual Studio Code$", title_regex = true }
 exclude_titles = ["^Settings$", "^Welcome$"]
 ```
+
+Process tree matching can split apps that share the same window executable:
+
+```toml
+[[apps]]
+id = "terminal"
+hotkey = "s"
+match = { exe = "alacritty.exe", process_tree = { mode = "descendant", exe = ["yazi.exe"], negate = true } }
+
+[[apps]]
+id = "yazi"
+hotkey = "y"
+match = { exe = "alacritty.exe", process_tree = { mode = "descendant", exe = ["yazi.exe"] } }
+```
+
+Add `debug = true` under `match.process_tree` to log process tree details to
+`%APPDATA%\harken\process_tree.debug.log`.
 
 ### All default keybindings
 

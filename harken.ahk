@@ -521,6 +521,11 @@ MatchWindowFields(match, hwnd) {
     if !MatchField(match, "title", title)
         return false
 
+    if match.Has("process_tree") && (match["process_tree"] is Map) {
+        if !MatchProcessTree(match["process_tree"], hwnd)
+            return false
+    }
+
     return true
 }
 
@@ -539,6 +544,348 @@ MatchField(match, field_key, value) {
     }
 
     return StrLower(value) = StrLower(pattern)
+}
+
+MatchProcessTree(process_tree, hwnd) {
+    if !(process_tree is Map)
+        return true
+    if !WinExist("ahk_id " hwnd)
+        return false
+
+    exe_list := []
+    if process_tree.Has("exe") {
+        exe_value := process_tree["exe"]
+        if (exe_value is Array)
+            exe_list := exe_value
+        else if (exe_value is String && exe_value != "")
+            exe_list := [exe_value]
+    }
+    if (exe_list.Length = 0)
+        return false
+
+    mode := process_tree.Has("mode") && process_tree["mode"] != "" ? process_tree["mode"] : "descendant"
+    max_depth := process_tree.Has("max_depth") ? process_tree["max_depth"] : 0
+    use_regex := process_tree.Has("exe_regex") && process_tree["exe_regex"]
+    negate := process_tree.Has("negate") && process_tree["negate"]
+    debug_enabled := process_tree.Has("debug") && process_tree["debug"]
+
+    pid := 0
+    try pid := WinGetPID("ahk_id " hwnd)
+    catch
+        pid := 0
+    if (pid = 0)
+        return false
+
+    matched := ""
+    context := GetMatchRunContext()
+    if (context is Map) {
+        signature := BuildProcessTreeSignature(mode, use_regex, max_depth, negate, exe_list)
+        memo_key := pid "|" signature
+        if context["memo"].Has(memo_key)
+            matched := context["memo"][memo_key]
+    }
+
+    if (matched = "") {
+        matched := ProcessTreeHasExe(pid, mode, exe_list, use_regex, max_depth)
+        if (context is Map)
+            context["memo"][memo_key] := matched
+    }
+    if debug_enabled
+        LogProcessTreeDebug(hwnd, pid, mode, exe_list, use_regex, max_depth, negate, matched)
+    return negate ? !matched : matched
+}
+
+ProcessTreeHasExe(pid, mode, exe_list, use_regex, max_depth := 0) {
+    snapshot := GetProcessSnapshot()
+    parent_map := snapshot["parent_map"]
+    exe_map := snapshot["exe_map"]
+    children_map := snapshot["children_map"]
+    ; Guardrail to keep descendant scans from stalling on huge trees.
+    max_nodes := 1000
+
+    if (mode = "ancestor")
+        return ProcessTreeMatchAncestors(pid, parent_map, exe_map, exe_list, use_regex, max_depth)
+    if (mode = "descendant")
+        return ProcessTreeMatchDescendants(pid, children_map, exe_map, exe_list, use_regex, max_depth, max_nodes)
+    if (mode = "either") {
+        if ProcessTreeMatchAncestors(pid, parent_map, exe_map, exe_list, use_regex, max_depth)
+            return true
+        return ProcessTreeMatchDescendants(pid, children_map, exe_map, exe_list, use_regex, max_depth, max_nodes)
+    }
+
+    return false
+}
+
+ProcessTreeMatchAncestors(pid, parent_map, exe_map, exe_list, use_regex, max_depth := 0) {
+    depth := 0
+    current := pid
+    visited := Map()
+    while parent_map.Has(current) {
+        parent := parent_map[current]
+        if (parent = 0)
+            break
+        if visited.Has(parent)
+            break
+        visited[parent] := true
+        depth += 1
+        if (max_depth > 0 && depth > max_depth)
+            break
+        if ProcessExeMatches(parent, exe_map, exe_list, use_regex)
+            return true
+        current := parent
+    }
+    return false
+}
+
+ProcessTreeMatchDescendants(pid, children_map, exe_map, exe_list, use_regex, max_depth := 0, max_nodes := 0) {
+    queue := []
+    depth_map := Map()
+    queue.Push(pid)
+    depth_map[pid] := 0
+    scanned := 0
+
+    while queue.Length {
+        current := queue.RemoveAt(1)
+        depth := depth_map[current]
+        if (max_depth > 0 && depth >= max_depth)
+            continue
+        if !children_map.Has(current)
+            continue
+        for _, child in children_map[current] {
+            scanned += 1
+            if (max_nodes > 0 && scanned > max_nodes)
+                return false
+            if ProcessExeMatches(child, exe_map, exe_list, use_regex)
+                return true
+            if !depth_map.Has(child) {
+                depth_map[child] := depth + 1
+                queue.Push(child)
+            }
+        }
+    }
+
+    return false
+}
+
+ProcessExeMatches(pid, exe_map, exe_list, use_regex) {
+    if !exe_map.Has(pid)
+        return false
+    exe_name := exe_map[pid]
+    if (exe_name = "")
+        return false
+    for _, pattern in exe_list {
+        if (pattern = "")
+            continue
+        if use_regex {
+            if !RegExMatch(pattern, "^\(\?i\)")
+                pattern := "(?i)" pattern
+            if RegExMatch(exe_name, pattern)
+                return true
+        } else if (StrLower(exe_name) = StrLower(pattern)) {
+            return true
+        }
+    }
+    return false
+}
+
+GetProcessSnapshot() {
+    ; Cache per match run to avoid repeated toolhelp scans.
+    context := GetMatchRunContext()
+    if (context is Map && (context["snapshot"] is Map))
+        return context["snapshot"]
+
+    ; Reuse snapshots briefly across hotkey runs to reduce lag.
+    static cache_tick := 0
+    static cache_snapshot := Map()
+    now := A_TickCount
+    if (cache_tick && now - cache_tick < 500)
+        return cache_snapshot
+
+    snapshot := BuildProcessSnapshot()
+    if (context is Map)
+        context["snapshot"] := snapshot
+    cache_tick := now
+    cache_snapshot := snapshot
+    return snapshot
+}
+
+BuildProcessSnapshot() {
+    parent_map := Map()
+    exe_map := Map()
+    children_map := Map()
+
+    snap := DllCall("CreateToolhelp32Snapshot", "UInt", 0x00000002, "UInt", 0, "Ptr")
+    if (snap = -1)
+        return Map("parent_map", parent_map, "exe_map", exe_map, "children_map", children_map)
+
+    size := (A_PtrSize = 8) ? 568 : 556
+    entry := Buffer(size, 0)
+    NumPut("UInt", size, entry, 0)
+    offset_pid := 8
+    offset_parent := (A_PtrSize = 8) ? 32 : 24
+    offset_exe := (A_PtrSize = 8) ? 44 : 36
+
+    if DllCall("Process32FirstW", "Ptr", snap, "Ptr", entry) {
+        loop {
+            pid := NumGet(entry, offset_pid, "UInt")
+            ppid := NumGet(entry, offset_parent, "UInt")
+            exe_name := StrGet(entry.Ptr + offset_exe, 260, "UTF-16")
+            if (pid != 0) {
+                parent_map[pid] := ppid
+                exe_map[pid] := exe_name
+                if !children_map.Has(ppid)
+                    children_map[ppid] := []
+                children_map[ppid].Push(pid)
+            }
+            if !DllCall("Process32NextW", "Ptr", snap, "Ptr", entry)
+                break
+        }
+    }
+
+    DllCall("CloseHandle", "Ptr", snap)
+    return Map("parent_map", parent_map, "exe_map", exe_map, "children_map", children_map)
+}
+
+BeginMatchRun() {
+    global process_tree_match_run, process_tree_match_run_depth
+    ; Scope expensive process snapshot + memo cache to a single hotkey run.
+    if !IsSet(process_tree_match_run_depth)
+        process_tree_match_run_depth := 0
+    process_tree_match_run_depth += 1
+    if (process_tree_match_run_depth = 1) {
+        process_tree_match_run := Map(
+            "snapshot", "",
+            "memo", Map()
+        )
+    }
+}
+
+EndMatchRun() {
+    global process_tree_match_run, process_tree_match_run_depth
+    if !IsSet(process_tree_match_run_depth)
+        process_tree_match_run_depth := 0
+    process_tree_match_run_depth := Max(process_tree_match_run_depth - 1, 0)
+    if (process_tree_match_run_depth = 0)
+        process_tree_match_run := ""
+}
+
+GetMatchRunContext() {
+    global process_tree_match_run, process_tree_match_run_depth
+    if !IsSet(process_tree_match_run_depth) || process_tree_match_run_depth = 0
+        return ""
+    if !(process_tree_match_run is Map)
+        return ""
+    return process_tree_match_run
+}
+
+BuildProcessTreeSignature(mode, use_regex, max_depth, negate, exe_list) {
+    return mode "|" use_regex "|" max_depth "|" negate "|" StrJoin(exe_list, ",")
+}
+
+LogProcessTreeDebug(hwnd, pid, mode, exe_list, use_regex, max_depth, negate, matched) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\process_tree.debug.log"
+
+    lines := []
+    lines.Push("[" A_Now "] hwnd=" Format("0x{:X}", hwnd) " pid=" pid)
+    lines.Push("  mode=" mode " use_regex=" use_regex " max_depth=" max_depth " negate=" negate " matched=" matched)
+    lines.Push("  exe_list=" StrJoin(exe_list, ","))
+
+    snapshot := GetProcessSnapshot()
+    parent_map := snapshot["parent_map"]
+    exe_map := snapshot["exe_map"]
+    children_map := snapshot["children_map"]
+
+    lines.Push("  ancestors:")
+    for _, item in BuildProcessTreeAncestorSummary(pid, parent_map, exe_map, max_depth)
+        lines.Push("    " item)
+
+    lines.Push("  descendants:")
+    for _, item in BuildProcessTreeDescendantSummary(pid, children_map, exe_map, max_depth)
+        lines.Push("    " item)
+
+    SafeFileAppend(StrJoin(lines, "`n") "`n", log_path)
+}
+
+BuildProcessTreeAncestorSummary(pid, parent_map, exe_map, max_depth := 0) {
+    max_rows := 20
+    rows := []
+    depth := 0
+    current := pid
+    visited := Map()
+    while parent_map.Has(current) {
+        parent := parent_map[current]
+        if (parent = 0)
+            break
+        if visited.Has(parent)
+            break
+        visited[parent] := true
+        depth += 1
+        if (max_depth > 0 && depth > max_depth)
+            break
+        exe_name := exe_map.Has(parent) ? exe_map[parent] : ""
+        rows.Push("d" depth " pid=" parent " exe=" exe_name)
+        if (rows.Length >= max_rows)
+            break
+        current := parent
+    }
+    if (rows.Length = 0)
+        rows.Push("(none)")
+    return rows
+}
+
+BuildProcessTreeDescendantSummary(pid, children_map, exe_map, max_depth := 0) {
+    max_rows := 40
+    rows := []
+    queue := []
+    depth_map := Map()
+    queue.Push(pid)
+    depth_map[pid] := 0
+
+    while queue.Length {
+        current := queue.RemoveAt(1)
+        depth := depth_map[current]
+        if (max_depth > 0 && depth >= max_depth)
+            continue
+        if !children_map.Has(current)
+            continue
+        for _, child in children_map[current] {
+            exe_name := exe_map.Has(child) ? exe_map[child] : ""
+            rows.Push("d" (depth + 1) " pid=" child " exe=" exe_name)
+            if (rows.Length >= max_rows)
+                return rows
+            if !depth_map.Has(child) {
+                depth_map[child] := depth + 1
+                queue.Push(child)
+            }
+        }
+    }
+
+    if (rows.Length = 0)
+        rows.Push("(none)")
+    return rows
+}
+
+SafeFileAppend(text, path, retries := 3) {
+    ; Guard against re-entrancy and transient file locks.
+    static writing := false
+    if writing
+        return false
+    writing := true
+    attempt := 0
+    loop retries {
+        attempt += 1
+        try {
+            FileAppend(text, path)
+            writing := false
+            return true
+        } catch {
+            Sleep(20)
+        }
+    }
+    writing := false
+    return false
 }
 
 OpenWindowInspector() {

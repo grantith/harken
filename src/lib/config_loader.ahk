@@ -47,7 +47,15 @@ ConfigSchema() {
                 "class", OptionalSpec("string"),
                 "class_regex", OptionalSpec("bool"),
                 "title", OptionalSpec("string"),
-                "title_regex", OptionalSpec("bool")
+                "title_regex", OptionalSpec("bool"),
+                "process_tree", OptionalSpec(Map(
+                    "mode", OptionalSpec("string"),
+                    "exe", OptionalSpec(["string"]),
+                    "exe_regex", OptionalSpec("bool"),
+                    "max_depth", OptionalSpec("number"),
+                    "negate", OptionalSpec("bool"),
+                    "debug", OptionalSpec("bool")
+                ))
             )),
             "run", OptionalSpec("string"),
             "run_start_in", OptionalSpec("string"),
@@ -206,10 +214,26 @@ NormalizeAppsConfig(config, errors) {
             app_config.Delete("id")
         }
         app_config["id"] := app_id
+        NormalizeAppProcessTreeConfig(app_config)
         normalized.Push(app_config)
     }
 
     config["apps"] := normalized
+}
+
+NormalizeAppProcessTreeConfig(app_config) {
+    if !(app_config is Map)
+        return
+    if !app_config.Has("match") || !(app_config["match"] is Map)
+        return
+    match := app_config["match"]
+    if !match.Has("process_tree") || !(match["process_tree"] is Map)
+        return
+    process_tree := match["process_tree"]
+    if process_tree.Has("exe") && (process_tree["exe"] is String)
+        process_tree["exe"] := [process_tree["exe"]]
+    if !process_tree.Has("mode") || process_tree["mode"] = ""
+        process_tree["mode"] := "descendant"
 }
 
 
@@ -302,8 +326,9 @@ ValidateApps(config, errors) {
             has_exe := match.Has("exe") && (match["exe"] != "")
             has_class := match.Has("class") && (match["class"] != "")
             has_title := match.Has("title") && (match["title"] != "")
-            if !has_exe && !has_class && !has_title
-                errors.Push("config.apps[" index "].match must define exe, class, or title")
+            has_process_tree := match.Has("process_tree") && (match["process_tree"] is Map)
+            if !has_exe && !has_class && !has_title && !has_process_tree
+                errors.Push("config.apps[" index "].match must define exe, class, title, or process_tree")
 
             if (match.Has("exe_regex") && !has_exe)
                 errors.Push("config.apps[" index "].match.exe_regex requires exe")
@@ -311,6 +336,20 @@ ValidateApps(config, errors) {
                 errors.Push("config.apps[" index "].match.class_regex requires class")
             if (match.Has("title_regex") && !has_title)
                 errors.Push("config.apps[" index "].match.title_regex requires title")
+
+            if has_process_tree {
+                process_tree := match["process_tree"]
+                has_tree_exe := process_tree.Has("exe") && (process_tree["exe"] is Array) && process_tree["exe"].Length
+                if !has_tree_exe
+                    errors.Push("config.apps[" index "].match.process_tree.exe must define one or more executables")
+                if process_tree.Has("exe_regex") && !has_tree_exe
+                    errors.Push("config.apps[" index "].match.process_tree.exe_regex requires exe")
+                mode := process_tree.Has("mode") ? process_tree["mode"] : "descendant"
+                if (mode != "ancestor" && mode != "descendant" && mode != "either")
+                    errors.Push("config.apps[" index "].match.process_tree.mode must be ancestor, descendant, or either")
+                if process_tree.Has("max_depth") && (process_tree["max_depth"] < 0)
+                    errors.Push("config.apps[" index "].match.process_tree.max_depth must be >= 0")
+            }
         }
     }
 }

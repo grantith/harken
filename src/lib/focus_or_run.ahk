@@ -5,7 +5,9 @@
 FocusOrRun(winTitle, exePath, hotkey_id, app_config := "", *) {
     static last_window := Map()
     target_hwnd := 0
+    BeginMatchRun()
     hwnds := GetAppWindowList(winTitle, app_config)
+    EndMatchRun()
     current_hwnd := 0
     try current_hwnd := WinGetID("A")
     catch
@@ -45,11 +47,24 @@ GetAppWindowList(win_title, app_config := "") {
 
 GetWindowsByMatch(match, app_config := "") {
     matches := []
-    for _, hwnd in GetWindowsAcrossDesktops() {
+    win_list := GetWindowsByMatchCandidates(match)
+    for _, hwnd in win_list {
         if MatchWindowFields(match, hwnd) && !AppConfigExcludesTitle(app_config, hwnd)
             matches.Push(hwnd)
     }
     return matches
+}
+
+GetWindowsByMatchCandidates(match) {
+    if !(match is Map)
+        return GetWindowsAcrossDesktops()
+    if match.Has("exe") && match["exe"] != "" && !(match.Has("exe_regex") && match["exe_regex"]) {
+        exe_name := match["exe"]
+        if RegExMatch(exe_name, "i)^ahk_exe\s+")
+            return GetWindowsAcrossDesktops(exe_name)
+        return GetWindowsAcrossDesktops("ahk_exe " exe_name)
+    }
+    return GetWindowsAcrossDesktops()
 }
 
 FilterExcludedWindows(hwnds, app_config := "") {

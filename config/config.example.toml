@@ -59,6 +59,18 @@ match = { exe = "Code.exe", title = " - Visual Studio Code$", title_regex = true
 # Optional per-app focus border tweaks.
 focus_border = { border_color = "#4D96FF", border_thickness = 3, corner_radius = 12 }
 
+# Process tree matching (example): split a terminal app and its child tool.
+#
+# [[apps]]
+# id = "terminal"
+# hotkey = "s"
+# match = { exe = "alacritty.exe", process_tree = { mode = "descendant", exe = ["yazi.exe"], negate = true, debug = true } }
+#
+# [[apps]]
+# id = "yazi"
+# hotkey = "y"
+# match = { exe = "alacritty.exe", process_tree = { mode = "descendant", exe = ["yazi.exe"], debug = true } }
+
 [[global_hotkeys]]
 enabled = true
 hotkey = "Alt"
