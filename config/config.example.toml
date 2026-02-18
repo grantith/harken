@@ -129,6 +129,7 @@ move_next_hotkey = "l"
 # Debug logs write to %APPDATA%\harken when enabled.
 debug_cycle = false
 debug_hotkeys = false
+# debug_focus = false
 tray_indicator = true
 tray_format = "{current}/{total}"
 # auto_assign = false

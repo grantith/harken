@@ -26,6 +26,35 @@ VirtualDesktopSwitchOnFocus() {
     return Config["virtual_desktop"]["switch_on_focus"]
 }
 
+VirtualDesktopFocusDebugEnabled() {
+    global Config
+    if !VirtualDesktopEnabled()
+        return false
+    return Config["virtual_desktop"].Has("debug_focus") && Config["virtual_desktop"]["debug_focus"]
+}
+
+EnsureFocusDebugLogInit() {
+    global focus_debug_log_initialized
+    if !IsSet(focus_debug_log_initialized)
+        focus_debug_log_initialized := false
+    if focus_debug_log_initialized
+        return
+    if !VirtualDesktopFocusDebugEnabled()
+        return
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    TryResetFocusLogFile(log_dir "\\vd.focus.debug.log")
+    focus_debug_log_initialized := true
+}
+
+TryResetFocusLogFile(path) {
+    try {
+        if FileExist(path)
+            FileDelete(path)
+        FileAppend("", path)
+    }
+}
+
 InitVirtualDesktop() {
     if !VirtualDesktopEnabled()
         return
@@ -34,6 +63,7 @@ InitVirtualDesktop() {
         VD.createUntil(ensure_count)
     InitVirtualDesktopTrayIndicator()
     InitVirtualDesktopAutoAssign()
+    EnsureFocusDebugLogInit()
 }
 
 InitVirtualDesktopAutoAssign() {
@@ -348,9 +378,42 @@ GetCurrentDesktopNumFresh() {
 GetWindowDesktopNum(hwnd) {
     if !VirtualDesktopEnabled()
         return 0
-    try return VD.getDesktopNumOfHWND(hwnd)
+    desktop_num := 0
+    try desktop_num := VD.getDesktopNumOfHWND(hwnd)
     catch as err
+        desktop_num := 0
+    if (desktop_num > 0) {
+        SetWindowDesktopCache(hwnd, desktop_num)
+        return desktop_num
+    }
+    if (desktop_num < 0)
+        return desktop_num
+    cached := GetWindowDesktopCache(hwnd)
+    if (cached > 0)
+        return cached
+    return desktop_num
+}
+
+GetWindowDesktopCache(hwnd) {
+    global window_desktop_cache
+    if !IsSet(window_desktop_cache) || !(window_desktop_cache is Map)
+        window_desktop_cache := Map()
+    if !window_desktop_cache.Has(hwnd)
         return 0
+    if !WindowExistsAcrossDesktops(hwnd) {
+        window_desktop_cache.Delete(hwnd)
+        return 0
+    }
+    return window_desktop_cache[hwnd]
+}
+
+SetWindowDesktopCache(hwnd, desktop_num) {
+    global window_desktop_cache
+    if !IsSet(window_desktop_cache) || !(window_desktop_cache is Map)
+        window_desktop_cache := Map()
+    if (desktop_num <= 0)
+        return
+    window_desktop_cache[hwnd] := desktop_num
 }
 
 IsWindowOnCurrentDesktop(hwnd) {
@@ -386,39 +449,77 @@ ActivateWindowAcrossDesktops(hwnd) {
     if !WindowExistsAcrossDesktops(hwnd)
         return 0
 
+    if VirtualDesktopFocusDebugEnabled()
+        LogDesktopFocusDebug("activate_attempt", hwnd, GetWindowDesktopNum(hwnd))
+
     if VirtualDesktopSwitchOnFocus() {
         desktop_num := GetWindowDesktopNum(hwnd)
-        if (desktop_num > 0 && desktop_num != VD.getCurrentDesktopNum()) {
+        current_desktop := GetCurrentDesktopNumFresh()
+        if (desktop_num > 0 && desktop_num != current_desktop) {
             try {
                 VD.goToDesktopOfWindow("ahk_id " hwnd, true)
             } catch as err {
+                ; Fallback to direct desktop switch when goToDesktopOfWindow fails.
                 try {
-                    WinActivate "ahk_id " hwnd
+                    if VirtualDesktopFocusDebugEnabled()
+                        LogDesktopFocusDebug("switch_fallback", hwnd, desktop_num)
+                    VD.goToDesktopNum(desktop_num)
+                    VD.WaitDesktopSwitched(desktop_num)
                 } catch
+                    LogDesktopFocusDebug("switch_failed", hwnd, desktop_num)
                     return 0
             }
-            try return WinGetID("A")
-            catch
+            try {
+                if VirtualDesktopFocusDebugEnabled()
+                    LogDesktopFocusDebug("activate_switched", hwnd, desktop_num)
+                WinActivate "ahk_id " hwnd
+                return WinGetID("A")
+            } catch
+                LogDesktopFocusDebug("activate_failed", hwnd, desktop_num)
                 return 0
         }
 
         if (desktop_num <= 0) {
             try {
+                if VirtualDesktopFocusDebugEnabled()
+                    LogDesktopFocusDebug("switch_unknown", hwnd, desktop_num)
                 VD.goToDesktopOfWindow("ahk_id " hwnd, true)
-                try return WinGetID("A")
-                catch
+                try {
+                    WinActivate "ahk_id " hwnd
+                    return WinGetID("A")
+                } catch
                     return 0
             } catch as err {
+                LogDesktopFocusDebug("switch_unknown_failed", hwnd, desktop_num)
                 ; fall through to direct activation
             }
         }
     }
 
     try {
+        if VirtualDesktopFocusDebugEnabled()
+            LogDesktopFocusDebug("activate_direct", hwnd, GetWindowDesktopNum(hwnd))
         WinActivate "ahk_id " hwnd
     } catch
         return 0
     try return WinGetID("A")
     catch
         return 0
+}
+
+LogDesktopFocusDebug(reason, hwnd, desktop_num := 0) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+
+    exe_name := ""
+    title := ""
+    class_name := ""
+    try exe_name := WinGetProcessName("ahk_id " hwnd)
+    try title := WinGetTitle("ahk_id " hwnd)
+    try class_name := WinGetClass("ahk_id " hwnd)
+
+    line := "[" A_Now "] " reason " hwnd=" Format("0x{:X}", hwnd)
+    line .= " desktop=" desktop_num " exe=" exe_name " class=" class_name " title=" title
+    SafeFileAppend(line "`n", log_path)
 }

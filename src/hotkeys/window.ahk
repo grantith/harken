@@ -199,8 +199,8 @@ FilterWindowList(exe, list) {
         if VirtualDesktopEnabled() {
             desktop_num := GetWindowDesktopNum(id)
             if (desktop_num <= 0)
-                allow_invisible := true
-            else if (desktop_num != VD.getCurrentDesktopNum())
+                continue
+            if (desktop_num > 0 && desktop_num != VD.getCurrentDesktopNum())
                 allow_invisible := true
         }
         if (!allow_invisible && !(style & 0x10000000))

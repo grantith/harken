@@ -140,6 +140,7 @@ DefaultConfig() {
             "move_hotkeys", [],
             "debug_cycle", false,
             "debug_hotkeys", false,
+            "debug_focus", false,
             "tray_indicator", false,
             "tray_format", "{current}/{total}",
             "auto_assign", false,
@@ -452,6 +453,9 @@ RegisterSuperComboHotkey(hotkey_name, callback) {
         Hotkey(key " & " hotkey_name, callback)
 }
 
+global WINDOW_MATCH_CACHE_TTL_MS := 300000
+global window_match_cache := Map()
+
 MatchAppWindow(app, hwnd := 0) {
     if !(app is Map)
         return false
@@ -501,18 +505,61 @@ AppConfigExcludesTitle(app, hwnd) {
 }
 
 MatchWindowFields(match, hwnd) {
-    if !WinExist("ahk_id " hwnd)
+    if !WindowExistsAcrossDesktops(hwnd)
         return false
     ; Window handles can go stale during app switching; guard WinGet* calls.
-    try exe_name := WinGetProcessName("ahk_id " hwnd)
-    catch
-        return false
-    try class_name := WinGetClass("ahk_id " hwnd)
-    catch
-        return false
-    try title := WinGetTitle("ahk_id " hwnd)
-    catch
-        return false
+    bak_detect_hidden_windows := A_DetectHiddenWindows
+    A_DetectHiddenWindows := true
+    exe_name := ""
+    class_name := ""
+    title := ""
+    pid := 0
+    got_any := false
+    try {
+        exe_name := WinGetProcessName("ahk_id " hwnd)
+        got_any := true
+    }
+    try {
+        class_name := WinGetClass("ahk_id " hwnd)
+        got_any := true
+    }
+    try {
+        title := WinGetTitle("ahk_id " hwnd)
+        got_any := true
+    }
+    try {
+        pid := WinGetPID("ahk_id " hwnd)
+        got_any := true
+    }
+    A_DetectHiddenWindows := bak_detect_hidden_windows
+    if (pid = 0)
+        pid := GetWindowPidForMatch(hwnd)
+
+    if (!got_any) {
+        cached := GetWindowMatchCache(hwnd)
+        if (cached = "")
+            return false
+    } else {
+        cached := GetWindowMatchCache(hwnd)
+    }
+
+    if (exe_name = "" && cached)
+        exe_name := cached["exe"]
+    if (exe_name = "" && pid)
+        exe_name := GetProcessNameFromPid(pid)
+    if (exe_name = "" && pid)
+        exe_name := GetProcessNameFromSnapshot(pid)
+    if (class_name = "" && cached)
+        class_name := cached["class"]
+    if (title = "" && cached)
+        title := cached["title"]
+    if (pid = 0 && cached)
+        pid := cached["pid"]
+    if (pid = 0)
+        pid := GetWindowPidForMatch(hwnd)
+
+    if (got_any)
+        SetWindowMatchCache(hwnd, exe_name, class_name, title, pid)
 
     if !MatchField(match, "exe", exe_name)
         return false
@@ -573,6 +620,11 @@ MatchProcessTree(process_tree, hwnd) {
     try pid := WinGetPID("ahk_id " hwnd)
     catch
         pid := 0
+    if (pid = 0) {
+        cached := GetWindowMatchCache(hwnd)
+        if (cached)
+            pid := cached["pid"]
+    }
     if (pid = 0)
         return false
 
@@ -593,6 +645,51 @@ MatchProcessTree(process_tree, hwnd) {
     if debug_enabled
         LogProcessTreeDebug(hwnd, pid, mode, exe_list, use_regex, max_depth, negate, matched)
     return negate ? !matched : matched
+}
+
+GetProcessTreeMatchDetail(process_tree, hwnd) {
+    detail := Map("enabled", false)
+    if !(process_tree is Map)
+        return detail
+    if !WindowExistsAcrossDesktops(hwnd)
+        return detail
+
+    exe_list := []
+    if process_tree.Has("exe") {
+        exe_value := process_tree["exe"]
+        if (exe_value is Array)
+            exe_list := exe_value
+        else if (exe_value is String && exe_value != "")
+            exe_list := [exe_value]
+    }
+    if (exe_list.Length = 0)
+        return detail
+
+    mode := process_tree.Has("mode") && process_tree["mode"] != "" ? process_tree["mode"] : "descendant"
+    max_depth := process_tree.Has("max_depth") ? process_tree["max_depth"] : 0
+    use_regex := process_tree.Has("exe_regex") && process_tree["exe_regex"]
+    negate := process_tree.Has("negate") && process_tree["negate"]
+
+    bak_detect_hidden_windows := A_DetectHiddenWindows
+    A_DetectHiddenWindows := true
+    pid := 0
+    try pid := WinGetPID("ahk_id " hwnd)
+    catch
+        pid := 0
+    A_DetectHiddenWindows := bak_detect_hidden_windows
+    if (pid = 0)
+        pid := GetWindowPidForMatch(hwnd)
+    if (pid = 0)
+        return detail
+
+    matched := ProcessTreeHasExe(pid, mode, exe_list, use_regex, max_depth)
+    detail["enabled"] := true
+    detail["matched"] := matched
+    detail["final"] := negate ? !matched : matched
+    detail["negate"] := negate
+    detail["mode"] := mode
+    detail["max_depth"] := max_depth
+    return detail
 }
 
 ProcessTreeHasExe(pid, mode, exe_list, use_regex, max_depth := 0) {
@@ -780,6 +877,155 @@ GetMatchRunContext() {
 
 BuildProcessTreeSignature(mode, use_regex, max_depth, negate, exe_list) {
     return mode "|" use_regex "|" max_depth "|" negate "|" StrJoin(exe_list, ",")
+}
+
+GetWindowMatchCache(hwnd) {
+    global window_match_cache, WINDOW_MATCH_CACHE_TTL_MS
+    if !IsSet(WINDOW_MATCH_CACHE_TTL_MS)
+        WINDOW_MATCH_CACHE_TTL_MS := 300000
+    if !IsSet(window_match_cache) || !(window_match_cache is Map)
+        window_match_cache := Map()
+    if !window_match_cache.Has(hwnd)
+        return ""
+    entry := window_match_cache[hwnd]
+    if !(entry is Map) {
+        window_match_cache.Delete(hwnd)
+        return ""
+    }
+    if !entry.Has("seen_at") || (A_TickCount - entry["seen_at"] > WINDOW_MATCH_CACHE_TTL_MS) {
+        window_match_cache.Delete(hwnd)
+        return ""
+    }
+    return entry
+}
+
+SetWindowMatchCache(hwnd, exe_name, class_name, title, pid := 0) {
+    global window_match_cache
+    if !IsSet(window_match_cache) || !(window_match_cache is Map)
+        window_match_cache := Map()
+    entry := window_match_cache.Has(hwnd) ? window_match_cache[hwnd] : Map()
+    entry["exe"] := exe_name
+    entry["class"] := class_name
+    entry["title"] := title
+    entry["pid"] := pid
+    entry["seen_at"] := A_TickCount
+    window_match_cache[hwnd] := entry
+}
+
+TryUpdateWindowMatchCache(hwnd) {
+    exe_name := ""
+    class_name := ""
+    title := ""
+    pid := 0
+    got_any := false
+    bak_detect_hidden_windows := A_DetectHiddenWindows
+    A_DetectHiddenWindows := true
+    if VirtualDesktopEnabled() {
+        desktop_num := GetWindowDesktopNum(hwnd)
+        if (desktop_num <= 0)
+            return
+    }
+    try {
+        exe_name := WinGetProcessName("ahk_id " hwnd)
+        got_any := true
+    }
+    try {
+        class_name := WinGetClass("ahk_id " hwnd)
+        got_any := true
+    }
+    try {
+        title := WinGetTitle("ahk_id " hwnd)
+        got_any := true
+    }
+    try {
+        pid := WinGetPID("ahk_id " hwnd)
+        got_any := true
+    }
+    A_DetectHiddenWindows := bak_detect_hidden_windows
+    if (pid = 0)
+        pid := GetWindowPidForMatch(hwnd)
+    if (exe_name = "" && pid)
+        exe_name := GetProcessNameFromPid(pid)
+    if (exe_name = "" && pid)
+        exe_name := GetProcessNameFromSnapshot(pid)
+    if !got_any
+        return
+
+    global window_match_cache
+    if !IsSet(window_match_cache) || !(window_match_cache is Map)
+        window_match_cache := Map()
+    cached := window_match_cache.Has(hwnd) ? window_match_cache[hwnd] : ""
+    if (exe_name = "" && cached)
+        exe_name := cached["exe"]
+    if (class_name = "" && cached)
+        class_name := cached["class"]
+    if (title = "" && cached)
+        title := cached["title"]
+    if (pid = 0 && cached)
+        pid := cached["pid"]
+
+    SetWindowMatchCache(hwnd, exe_name, class_name, title, pid)
+}
+
+UpdateWindowMatchCacheFromList(hwnds) {
+    if !(hwnds is Array)
+        return
+    for _, hwnd in hwnds
+        TryUpdateWindowMatchCache(hwnd)
+}
+
+GetCachedWindowsByExe(exe_name) {
+    global window_match_cache
+    if !IsSet(window_match_cache) || !(window_match_cache is Map)
+        window_match_cache := Map()
+    list := []
+    if (exe_name = "")
+        return list
+    target := StrLower(exe_name)
+    for hwnd, entry in window_match_cache {
+        if !WindowExistsAcrossDesktops(hwnd) {
+            window_match_cache.Delete(hwnd)
+            continue
+        }
+        if VirtualDesktopEnabled() {
+            desktop_num := GetWindowDesktopNum(hwnd)
+            if (desktop_num <= 0)
+                continue
+        }
+        cached := GetWindowMatchCache(hwnd)
+        if (cached = "")
+            continue
+        exe_value := cached.Has("exe") ? cached["exe"] : ""
+        if (exe_value = "")
+            continue
+        if (StrLower(exe_value) = target)
+            list.Push(hwnd)
+    }
+    return list
+}
+
+GetProcessNameFromPid(pid) {
+    if (pid <= 0)
+        return ""
+    try return ProcessGetName(pid)
+    catch
+        return ""
+}
+
+GetProcessNameFromSnapshot(pid) {
+    if (pid <= 0)
+        return ""
+    snapshot := GetProcessSnapshot()
+    exe_map := snapshot["exe_map"]
+    if exe_map.Has(pid)
+        return exe_map[pid]
+    return ""
+}
+
+GetWindowPidForMatch(hwnd) {
+    pid := 0
+    DllCall("GetWindowThreadProcessId", "Ptr", hwnd, "UInt*", &pid)
+    return pid
 }
 
 LogProcessTreeDebug(hwnd, pid, mode, exe_list, use_regex, max_depth, negate, matched) {

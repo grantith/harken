@@ -136,6 +136,7 @@ ConfigSchema() {
             )],
             "debug_cycle", "bool",
             "debug_hotkeys", "bool",
+            "debug_focus", OptionalSpec("bool"),
             "tray_indicator", "bool",
             "tray_format", "string",
             "auto_assign", "bool",

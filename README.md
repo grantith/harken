@@ -177,6 +177,7 @@ Add `debug = true` under `match.process_tree` to log process tree details to
 | `super + alt + <key>` | Go to mapped desktop (`[[virtual_desktop.<N>]]`) |
 | `super + alt + shift + <key>` | Move window to mapped desktop (follow) |
 | `virtual_desktop.auto_assign` | Move newly created windows that match `apps[]` with `desktop` set |
+| `virtual_desktop.debug_focus` | Log cross-desktop focus attempts to `%APPDATA%\harken\vd.focus.debug.log` |
 
 #### Apps (defaults)
 
