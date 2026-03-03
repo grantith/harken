@@ -516,7 +516,8 @@ HandleSuperTap() {
     }
 
     if (A_TickCount - last_super_tap <= super_double_tap_ms) {
-        Window.SetMoveMode(true)
+        ; Use native overview instead of move mode (heuristic detects Task View state).
+        Send("#{Tab}")
         UpdateCommandToastVisibility()
         last_super_tap := 0
         return
@@ -526,9 +527,7 @@ HandleSuperTap() {
 }
 
 OnSuperKeyUp() {
-    global move_mode_enabled
-    if move_mode_enabled
-        HandleSuperTap()
+    HandleSuperTap()
     if ReloadModeActive() {
         global reload_mode_activated_at
         if (A_TickCount - reload_mode_activated_at < 500) {
@@ -884,17 +883,6 @@ if (vd_next_hotkey != "")
         LogVirtualDesktopAction("goto_relative hotkey=" vd_next_hotkey " delta=1 current=" GetCurrentDesktopNumFresh()),
         GoToRelativeDesktop(1)
     ))
-if (vd_scroll_switch) {
-    ; Optional wheel navigation to avoid breaking existing super+wheel resize behavior by default.
-    Hotkey("*WheelUp", (*) => (
-        LogVirtualDesktopAction("goto_relative hotkey=*WheelUp delta=-1 current=" GetCurrentDesktopNumFresh()),
-        GoToRelativeDesktop(-1)
-    ))
-    Hotkey("*WheelDown", (*) => (
-        LogVirtualDesktopAction("goto_relative hotkey=*WheelDown delta=1 current=" GetCurrentDesktopNumFresh()),
-        GoToRelativeDesktop(1)
-    ))
-}
 LogVirtualDesktopHotkeys("prev_hotkey=" vd_prev_hotkey " next_hotkey=" vd_next_hotkey)
 for _, entry in vd_goto_hotkeys {
     if !(entry is Map)
@@ -928,6 +916,20 @@ if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
         }
         LogVirtualDesktopHotkeys("map goto hotkey=" key_copy " desktop=" num_copy)
     }
+}
+HotIf
+
+HotIf (*) => IsSuperKeyPressed() && !GetKeyState("Shift", "P")
+if (vd_scroll_switch) {
+    ; Use super+wheel for desktop switching to match the native overview flow.
+    Hotkey("*WheelUp", (*) => (
+        LogVirtualDesktopAction("goto_relative hotkey=*WheelUp delta=-1 current=" GetCurrentDesktopNumFresh()),
+        GoToRelativeDesktop(-1)
+    ))
+    Hotkey("*WheelDown", (*) => (
+        LogVirtualDesktopAction("goto_relative hotkey=*WheelDown delta=1 current=" GetCurrentDesktopNumFresh()),
+        GoToRelativeDesktop(1)
+    ))
 }
 HotIf
 
@@ -1000,9 +1002,51 @@ if move_mode_enabled {
     HotIf
 }
 
+HotIf IsOverviewActive
+Hotkey("h", (*) => Send("{Left}"))
+Hotkey("l", (*) => Send("{Right}"))
+Hotkey("j", (*) => Send("{Down}"))
+Hotkey("k", (*) => Send("{Up}"))
+HotIf
+
+EnterMoveMode(*) {
+    global move_mode_enabled
+    if !move_mode_enabled
+        return
+    Window.SetMoveMode(true)
+    UpdateCommandToastVisibility()
+}
+
 ExitMoveMode() {
     Window.SetMoveMode(false)
     UpdateCommandToastVisibility()
+}
+
+IsOverviewActive(*) {
+    ; Heuristic: Task View classes vary by Windows build, so allow a broader list.
+    static overview_classes := ["MultitaskingViewFrame", "TaskViewFrame", "XamlExplorerHostIslandWindow"]
+    static allowed_processes := Map("explorer.exe", true, "ShellExperienceHost.exe", true)
+
+    for _, class_name in overview_classes {
+        hwnds := WinGetList("ahk_class " class_name)
+        for _, hwnd in hwnds {
+            if !hwnd
+                continue
+            process_name := ""
+            try process_name := WinGetProcessName("ahk_id " hwnd)
+            process_lower := StrLower(process_name)
+            if (process_lower = "" || !allowed_processes.Has(process_lower))
+                continue
+            if (class_name = "XamlExplorerHostIslandWindow") {
+                title := ""
+                try title := WinGetTitle("ahk_id " hwnd)
+                if (title != "" && !InStr(title, "Task View") && !InStr(title, "Multitasking"))
+                    continue
+            }
+            return true
+        }
+    }
+    return false
 }
 
 BeginSuperDrag(*) {

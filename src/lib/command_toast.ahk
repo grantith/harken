@@ -345,6 +345,8 @@ BuildCommandToastModel() {
         lines.Push(FormatRow("i", "window inspector", key_width))
         lines.Push(FormatRow("n", "toggle command overlay", key_width))
         lines.Push(FormatRow("w", "new window (active app)", key_width))
+        if Config["window"]["move_mode"]["enable"]
+            lines.Push(FormatRow("m", "enter move mode", key_width))
         lines.Push(FormatRow("g", "reapply app desktops", key_width))
         lines.Push(FormatRow("Esc/super", "exit command mode", key_width))
         model["mode"] := "command"
@@ -370,6 +372,8 @@ BuildCommandToastRows(key_width := 16) {
     rows.Push(Map("key", "super+shift+h/j/k/l", "desc", "resize center"))
     rows.Push(Map("key", "super+ctrl+h/j/k/l", "desc", "move"))
     rows.Push(Map("key", "super+m", "desc", "maximize"))
+    rows.Push(Map("key", "double-super", "desc", "native overview"))
+    rows.Push(Map("key", "overview h/j/k/l", "desc", "navigate"))
     rows.Push(Map("key", "alt+-", "desc", "minimize"))
     rows.Push(Map("key", "alt+q", "desc", "close"))
     rows.Push(Map("key", "super+" Config["window"]["cycle_app_windows_hotkey"], "desc", "cycle app windows"))
