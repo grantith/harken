@@ -102,6 +102,15 @@ ConfigSchema() {
             "include_minimized", "bool",
             "close_on_focus_loss", "bool"
         ),
+        "screen_search", Map(
+            "enabled", "bool",
+            "hotkey", "string",
+            "hint_chars", "string",
+            "max_results", "number",
+            "min_size_px", "number",
+            "min_distance_px", "number",
+            "hint_opacity", "number"
+        ),
         "window_manager", Map(
             "grid_size", "number",
             "margins", Map(

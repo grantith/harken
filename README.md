@@ -33,6 +33,7 @@ Harken allows a keyboard-centered workflow on Windows: a single super modifier, 
 - Cycle stacked tiles with `super + [` and `super + ]`.
 - Cycle focus between tiles of the same program with `super + c`.
 - Show a hotkey menu with `super + /`.
+- Screen search hints with `super + .`.
 - Virtual desktops (native)
   - Navigate between desktops with better hotkeys
   - Assign custom hotkeys for the index-based virtual desktops.
@@ -67,6 +68,7 @@ Other
 - `super + alt` sends `ctrl + tab` (configurable via `global_hotkeys`)
 - `super + c` cycle through windows of the same app
 - `super + shift + c` cycle through windows of the same app on the current desktop
+- `super + .` screen search (click hints)
 - `super + alt + h/l` switch to previous/next virtual desktop
 - `super + alt + shift + h/l` move the active window to previous/next desktop (follow)
 - `super + w` open Window Selector (fuzzy find open windows)
@@ -143,6 +145,7 @@ Add `debug = true` under `match.process_tree` to log process tree details to
 | --- | --- |
 | `super + /` | Show command overlay (temporary) |
 | `super + w` | Window selector (window walker) |
+| `super + .` | Screen search (click hints) |
 | `super + c` | Cycle app windows across desktops |
 | `super + shift + c` | Cycle app windows on current desktop |
 | `super + space` | Center width cycle |
@@ -221,6 +224,19 @@ enabled = false
 interval_ms = 2500
 ```
 
+### Screen search
+
+```toml
+[screen_search]
+enabled = true
+hotkey = "."
+hint_chars = "asdfghjklqwertyuiopzxcvbnm"
+max_results = 200
+min_size_px = 12
+min_distance_px = 40
+hint_opacity = 235
+```
+
 ## Limitations
 - This has not been tested with multi-monitor setups or much outside of ultra-wide monitors.
 - Virtual desktop integration requires AutoHotkey v2.1-alpha-18 or later.
@@ -233,6 +249,8 @@ interval_ms = 2500
   - License: `LICENSES/JXON_ahk2-LICENSE.md`
 - VD.ahk from https://github.com/FuPeiJiang/VD.ahk
   - License: `LICENSES/VD.ahk-LICENSE.md`
+- UIA.ahk v1.1.2 from https://github.com/Descolada/UIA-v2
+  - License: `LICENSES/UIA.ahk-LICENSE.md`
 
 ## Similar tools and inspirations
 

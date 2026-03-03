@@ -17,6 +17,9 @@ RegisterUnboundHotkeys() {
     AddUsedKey(used_keys, "o")
     AddUsedKey(used_keys, "n")
 
+    if Config.Has("screen_search") && Config["screen_search"]["enabled"]
+        AddUsedKey(used_keys, Config["screen_search"]["hotkey"])
+
     for _, app in Config["apps"] {
         if app.Has("hotkey") && app["hotkey"] != ""
             AddUsedKey(used_keys, app["hotkey"])

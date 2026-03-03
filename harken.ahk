@@ -9,6 +9,8 @@
 #Include src/lib/virtual_desktop.ahk
 #Include src/lib/focus_or_run.ahk
 #Include src/lib/command_toast.ahk
+#Include src/lib/UIA.ahk
+#Include src/lib/screen_search.ahk
 #Include src/lib/window_inspector.ahk
 
 config_dir := GetConfigDir()
@@ -68,6 +70,7 @@ SetWinDelay(-1)
 #Include src/hotkeys/window.ahk
 #Include src/hotkeys/directional_focus.ahk
 #Include src/hotkeys/window_walker.ahk
+#Include src/hotkeys/screen_search.ahk
 #Include src/hotkeys/unbound.ahk
 
 DefaultConfig() {
@@ -110,6 +113,15 @@ DefaultConfig() {
             "match_exe", true,
             "include_minimized", true,
             "close_on_focus_loss", true
+        ),
+        "screen_search", Map(
+            "enabled", true,
+            "hotkey", ".",
+            "hint_chars", "asdfghjklqwertyuiopzxcvbnm",
+            "max_results", 200,
+            "min_size_px", 12,
+            "min_distance_px", 40,
+            "hint_opacity", 235
         ),
         "config_watch", Map(
             "enabled", false,
@@ -412,6 +424,10 @@ ExecuteCommand(callback) {
 }
 
 OnSuperKeyDown() {
+    if ScreenSearch.IsActive() {
+        ScreenSearch.Hide()
+        return
+    }
     if WindowWalker.IsActive() {
         WindowWalker.Hide()
         return

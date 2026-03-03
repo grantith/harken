@@ -378,6 +378,9 @@ BuildCommandToastRows(key_width := 16) {
     if Config.Has("window_selector") && Config["window_selector"]["enabled"] {
         rows.Push(Map("key", "super+" Config["window_selector"]["hotkey"], "desc", "window selector"))
     }
+    if Config.Has("screen_search") && Config["screen_search"]["enabled"] {
+        rows.Push(Map("key", "super+" Config["screen_search"]["hotkey"], "desc", "screen search"))
+    }
     if Config.Has("directional_focus") && Config["directional_focus"]["enabled"] {
         rows.Push(Map("key", "alt+h/l", "desc", "focus left/right"))
         rows.Push(Map("key", "alt+j/k", "desc", "focus down/up"))
