@@ -251,3 +251,19 @@ I really like komorebi--though I didn't use it for long and I have never been ab
 ### [GlazeWM](https://github.com/glzr-io/glazewm)
 
 GlazeWM is another popular tiling window manager for Windows operating systems.
+
+
+### Feature comparison (Harken vs similar Windows tools)
+
+| Feature | Harken | [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) | [komorebi](https://github.com/LGUG2Z/komorebi) | [GlazeWM](https://github.com/glzr-io/glazewm) |
+| --- | --- | --- | --- | --- |
+| Primary interaction model | Keyboard-first hotkeys and commands | Zone-based snapping (mouse + keyboard) | Dynamic tiling WM | Dynamic tiling WM |
+| Launch-or-focus app hotkeys | Yes (configurable per app) | No (outside scope) | Possible via external tooling/scripts | Possible via external tooling/scripts |
+| Directional focus movement | Yes (`alt + h/j/k/l`) | No | Yes | Yes |
+| Stack/window cycling | Yes (`super + [` / `super + ]`, app cycling) | Mostly | Yes (tiling containers/workspaces) | Yes (tiling containers/workspaces) |
+| Virtual desktop hotkeys | Yes (native desktop integration) | Indirect (PowerToys + Windows shortcuts) | Yes | Yes |
+| Freeform floating adjustments | Yes (move mode + resize controls) | Primarily zone snapping | Primarily tiling; floating is secondary | Primarily tiling; floating is secondary |
+| Built-in command/help overlay | Yes (`super + /`, command mode) | No | No built-in overlay | No built-in overlay |
+| Config format | TOML | GUI + JSON settings | JSON/YAML-style config | YAML |
+| Best fit | Users who want keyboard speed without fully committing to tiling | Users who want quick snap layouts | Users who want full tiling workflows | Users who want full tiling workflows |
+
