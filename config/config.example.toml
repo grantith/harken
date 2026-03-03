@@ -57,7 +57,7 @@ run_paths = []
 [apps.vscode-border]
 match = { exe = "Code.exe", title = " - Visual Studio Code$", title_regex = true }
 # Optional per-app focus border tweaks.
-focus_border = { border_color = "#4D96FF", border_thickness = 3, corner_radius = 12 }
+focus_border = { border_color = "#4D96FF", border_thickness = 7, corner_radius = 12 }
 
 # Process tree matching (example): split a terminal app and its child tool.
 #
@@ -159,7 +159,7 @@ enabled = true
 border_color = "#222feb"
 move_mode_color = "#2ECC71"
 command_mode_color = "#FFD400"
-border_thickness = 4
+border_thickness = 7
 corner_radius = 16
 update_interval_ms = 20
 
