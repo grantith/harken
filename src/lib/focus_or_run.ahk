@@ -272,14 +272,18 @@ LogFocusOrRunSnapshotStats(exe_name) {
 
 GetAllTopLevelWindows() {
     hwnds := []
-    callback := CallbackCreate(EnumWindowsCallback.Bind(hwnds), "Fast")
+    global enum_windows_target := hwnds
+    callback := CallbackCreate(EnumWindowsCallback, "Fast")
     DllCall("EnumWindows", "Ptr", callback, "Ptr", 0)
     CallbackFree(callback)
+    enum_windows_target := ""
     return hwnds
 }
 
-EnumWindowsCallback(hwnds, hwnd, lparam) {
-    hwnds.Push(hwnd)
+EnumWindowsCallback(hwnd, lparam) {
+    global enum_windows_target
+    if (enum_windows_target is Array)
+        enum_windows_target.Push(hwnd)
     return true
 }
 
