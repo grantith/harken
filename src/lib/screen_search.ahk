@@ -234,10 +234,10 @@ class ScreenSearch
             if !ctrl
                 continue
             if (input = "") {
-                ctrl.Visible := true
+                try ctrl.Visible := true
                 continue
             }
-            ctrl.Visible := (InStr(label, input) = 1)
+            try ctrl.Visible := (InStr(label, input) = 1)
         }
     }
 
@@ -405,13 +405,14 @@ class ScreenSearch
                 try is_toggle := element.GetCachedPropertyValue(UIA.Property.IsTogglePatternAvailable)
                 try is_select := element.GetCachedPropertyValue(UIA.Property.IsSelectionItemPatternAvailable)
                 try control_type := element.GetCachedPropertyValue(UIA.Property.ControlType)
-                if !(is_focusable || is_invoke || is_expand || is_toggle || is_select || control_type = UIA.Type.Button)
+                if !(is_focusable || is_invoke || is_expand || is_toggle || is_select || control_type = UIA.Type.Button) {
                     continue
+                }
 
                 center_x := rect.l + (width / 2)
                 center_y := rect.t + (height / 2)
-                if (center_x < window_rect["left"] || center_x > window_rect["right"]
-                    || center_y < window_rect["top"] || center_y > window_rect["bottom"])
+                if (rect.l < window_rect["left"] || rect.r > window_rect["right"]
+                    || rect.t < window_rect["top"] || rect.b > window_rect["bottom"])
                     continue
 
                 adaptive_min_distance := Round(height * 0.6)
@@ -522,6 +523,7 @@ class ScreenSearch
         bottom := NumGet(rect, 12, "int")
         return Map("left", left, "top", top, "right", right, "bottom", bottom)
     }
+
 
     static RenderHints(elements) {
         ScreenSearch.DestroyGui()
