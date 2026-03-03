@@ -14,6 +14,8 @@ class WindowWalker
     static image_list := ""
     static icon_cache := Map()
     static corner_radius := 8
+    static last_monitor := ""
+    static last_monitor_work_area_key := ""
     static excluded_exes := Map(
         "applicationframehost", true,
         "lockapp", true,
@@ -32,6 +34,7 @@ class WindowWalker
         if !Config.Has("window_selector") || !Config["window_selector"]["enabled"]
             return
 
+        WindowWalker.EnsureGuiForMonitorContext()
         WindowWalker.EnsureGui()
         WindowWalker.EnsureNavigationHotkeys()
         WindowWalker.RefreshWindows()
@@ -89,6 +92,39 @@ class WindowWalker
         WindowWalker.gui.OnEvent("Close", (*) => WindowWalker.Hide())
     }
 
+    static EnsureGuiForMonitorContext()
+    {
+        ; Recreate the GUI when the active monitor work area changes so stale DPI/layout state
+        ; does not keep clipping content after monitor detach/attach or scale transitions.
+        monitor := WindowWalker.GetActiveMonitorNumber()
+        work_area_key := WindowWalker.GetMonitorWorkAreaKey(monitor)
+        if !WindowWalker.gui {
+            WindowWalker.last_monitor := monitor
+            WindowWalker.last_monitor_work_area_key := work_area_key
+            return
+        }
+
+        if (WindowWalker.last_monitor = monitor && WindowWalker.last_monitor_work_area_key = work_area_key)
+            return
+
+        WindowWalker.DestroyGui()
+        WindowWalker.last_monitor := monitor
+        WindowWalker.last_monitor_work_area_key := work_area_key
+    }
+
+    static DestroyGui()
+    {
+        if WindowWalker.gui {
+            try WindowWalker.gui.Destroy()
+        }
+
+        WindowWalker.gui := ""
+        WindowWalker.search_edit := ""
+        WindowWalker.list_view := ""
+        WindowWalker.image_list := ""
+        WindowWalker.icon_cache := Map()
+    }
+
     static ShowCentered()
     {
         WindowWalker.gui.Show("Hide AutoSize")
@@ -98,6 +134,9 @@ class WindowWalker
         pos_x := left + (right - left - w) / 2
         pos_y := top + (bottom - top - h) / 2
         WindowWalker.gui.Show("x" pos_x " y" pos_y)
+        ; Query final dimensions after positioning so rounded-corner clipping uses current
+        ; monitor scaling instead of stale dimensions captured from another monitor context.
+        WindowWalker.gui.GetPos(,, &w, &h)
         WindowWalker.ApplyRoundedCorners(w, h)
     }
 
@@ -105,11 +144,16 @@ class WindowWalker
     {
         if !WindowWalker.gui
             return
-        if (!width || !height) {
-            WindowWalker.gui.GetPos(,, &width, &height)
-        }
-        if (width <= 0 || height <= 0)
+        ; Always refresh dimensions from the live window so the region is never based on stale
+        ; size values from a previous monitor/DPI context.
+        WindowWalker.gui.GetPos(,, &width, &height)
+
+        if (width <= 0 || height <= 0) {
+            ; Clear any old clip region instead of leaving the GUI content partially cropped.
+            try WinSetRegion(, WindowWalker.gui)
             return
+        }
+
         radius := WindowWalker.corner_radius
         try WinSetRegion("0-0 w" width " h" height " r" radius "-" radius, WindowWalker.gui)
     }
@@ -461,7 +505,16 @@ class WindowWalker
 
     static GetActiveWorkArea(&left, &top, &right, &bottom)
     {
+        mon := WindowWalker.GetActiveMonitorNumber()
+        if !mon
+            mon := MonitorGetPrimary()
+        MonitorGetWorkArea(mon, &left, &top, &right, &bottom)
+    }
+
+    static GetActiveMonitorNumber()
+    {
         mon := ""
+        hwnd := ""
         try hwnd := WinGetID("A")
         if hwnd {
             try mon_handle := DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 2, "Ptr")
@@ -470,7 +523,15 @@ class WindowWalker
         }
         if !mon
             mon := MonitorGetPrimary()
+        return mon
+    }
+
+    static GetMonitorWorkAreaKey(mon)
+    {
+        if !mon
+            mon := MonitorGetPrimary()
         MonitorGetWorkArea(mon, &left, &top, &right, &bottom)
+        return mon "|" left "|" top "|" right "|" bottom
     }
 
     static ConvertMonitorHandleToNumber(handle)
