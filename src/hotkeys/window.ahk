@@ -10,6 +10,7 @@ center_cycle_hotkey := Config["window"]["center_width_cycle_hotkey"]
 cycle_app_windows_hotkey := Config["window"]["cycle_app_windows_hotkey"]
 cycle_app_windows_current_hotkey := Config["window"]["cycle_app_windows_current_hotkey"]
 vd_config := Config.Has("virtual_desktop") ? Config["virtual_desktop"] : Map()
+vd_scroll_switch := vd_config.Has("scroll_switch") ? vd_config["scroll_switch"] : false
 vd_prev_hotkey := vd_config.Has("prev_hotkey") ? vd_config["prev_hotkey"] : ""
 vd_next_hotkey := vd_config.Has("next_hotkey") ? vd_config["next_hotkey"] : ""
 vd_move_prev_hotkey := vd_config.Has("move_prev_hotkey") ? vd_config["move_prev_hotkey"] : ""
@@ -883,6 +884,17 @@ if (vd_next_hotkey != "")
         LogVirtualDesktopAction("goto_relative hotkey=" vd_next_hotkey " delta=1 current=" GetCurrentDesktopNumFresh()),
         GoToRelativeDesktop(1)
     ))
+if (vd_scroll_switch) {
+    ; Optional wheel navigation to avoid breaking existing super+wheel resize behavior by default.
+    Hotkey("*WheelUp", (*) => (
+        LogVirtualDesktopAction("goto_relative hotkey=*WheelUp delta=-1 current=" GetCurrentDesktopNumFresh()),
+        GoToRelativeDesktop(-1)
+    ))
+    Hotkey("*WheelDown", (*) => (
+        LogVirtualDesktopAction("goto_relative hotkey=*WheelDown delta=1 current=" GetCurrentDesktopNumFresh()),
+        GoToRelativeDesktop(1)
+    ))
+}
 LogVirtualDesktopHotkeys("prev_hotkey=" vd_prev_hotkey " next_hotkey=" vd_next_hotkey)
 for _, entry in vd_goto_hotkeys {
     if !(entry is Map)
@@ -930,6 +942,16 @@ if (vd_move_next_hotkey != "")
         LogVirtualDesktopAction("move_relative hotkey=" vd_move_next_hotkey " delta=1 current=" GetCurrentDesktopNumFresh()),
         MoveWindowToRelativeDesktop(1)
     ))
+if (vd_scroll_switch) {
+    Hotkey("*WheelUp", (*) => (
+        LogVirtualDesktopAction("move_relative hotkey=*WheelUp delta=-1 current=" GetCurrentDesktopNumFresh()),
+        MoveWindowToRelativeDesktop(-1)
+    ))
+    Hotkey("*WheelDown", (*) => (
+        LogVirtualDesktopAction("move_relative hotkey=*WheelDown delta=1 current=" GetCurrentDesktopNumFresh()),
+        MoveWindowToRelativeDesktop(1)
+    ))
+}
 LogVirtualDesktopHotkeys("move_prev_hotkey=" vd_move_prev_hotkey " move_next_hotkey=" vd_move_next_hotkey)
 for _, entry in vd_move_hotkeys {
     if !(entry is Map)

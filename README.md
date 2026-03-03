@@ -173,7 +173,9 @@ Add `debug = true` under `match.process_tree` to log process tree details to
 | Shortcut | Action |
 | --- | --- |
 | `super + alt + h/l` | Previous/next desktop |
+| `super + alt + WheelUp/WheelDown` | Previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
 | `super + alt + shift + h/l` | Move window to previous/next desktop (follow) |
+| `super + alt + shift + WheelUp/WheelDown` | Move window to previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
 | `super + alt + <key>` | Go to mapped desktop (`[[virtual_desktop.<N>]]`) |
 | `super + alt + shift + <key>` | Move window to mapped desktop (follow) |
 | `virtual_desktop.auto_assign` | Move newly created windows that match `apps[]` with `desktop` set |

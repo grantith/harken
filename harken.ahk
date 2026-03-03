@@ -131,6 +131,7 @@ DefaultConfig() {
             "switch_on_focus", true,
             "ensure_count", 0,
             "cycle_prefer_current", true,
+            "scroll_switch", false,
             "prev_hotkey", "h",
             "next_hotkey", "l",
             "move_prev_hotkey", "h",

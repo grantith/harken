@@ -120,6 +120,7 @@ enabled = true
 switch_on_focus = true
 ensure_count = 0
 cycle_prefer_current = true
+scroll_switch = true
 # Hotkey fields here use AHK syntax without super (super is implied).
 # Modifiers are applied by Harken (alt or alt+shift) for desktop actions.
 prev_hotkey = "h"

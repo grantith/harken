@@ -118,6 +118,7 @@ ConfigSchema() {
             "switch_on_focus", "bool",
             "ensure_count", "number",
             "cycle_prefer_current", "bool",
+            "scroll_switch", "bool",
             "prev_hotkey", "string",
             "next_hotkey", "string",
             "move_prev_hotkey", "string",
