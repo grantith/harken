@@ -164,6 +164,7 @@ max_results = 200
 min_size_px = 12
 min_distance_px = 40
 hint_opacity = 235
+debug_log = false
 
 # -------------------------------------------------------------
 # Window manager (grid + gap)
@@ -190,9 +191,15 @@ switch_on_focus = true
 ensure_count = 0
 cycle_prefer_current = true
 
-# Optional mouse wheel switching (super+alt+wheel).
+# Optional mouse wheel switching (super+wheel).
 # Keep disabled if you use super+wheel for resize elsewhere.
 scroll_switch = true
+
+[virtual_desktop.switch_curtain]
+enabled = true
+# 0-255 opacity (204 ~= 80%).
+opacity = 204
+color = "#202020"
 
 # Hotkey fields here use AHK syntax without super (super is implied).
 # Modifiers are applied by Harken (alt or alt+shift) for desktop actions.

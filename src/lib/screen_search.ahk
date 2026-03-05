@@ -15,6 +15,7 @@ class ScreenSearch
     static focus_timer := 0
     static hidden := false
     static target_hwnd := 0
+    static explorer_active := false
 
     static Toggle(*) {
         if ScreenSearch.active {
@@ -39,8 +40,10 @@ class ScreenSearch
 
         ScreenSearch.active := true
         ScreenSearch.target_hwnd := hwnd
+        ScreenSearch.explorer_active := ScreenSearch.IsExplorerWindow(hwnd)
         ScreenSearch.input_buffer := ""
         ScreenSearch.hidden := false
+        ScreenSearch.ResetDebugLog()
         ScreenSearch.DestroyGui()
         ScreenSearch.StartBuild()
         ScreenSearch.StartInputHook()
@@ -250,6 +253,7 @@ class ScreenSearch
         element := hint["element"]
         if !element
             return
+        control_type := hint.Has("control_type") ? hint["control_type"] : 0
         if ScreenSearch.TryInvokeElement(element)
             return
         if ScreenSearch.TrySelectionElement(element)
@@ -258,6 +262,14 @@ class ScreenSearch
             return
         if ScreenSearch.TryExpandCollapseElement(element)
             return
+        if ScreenSearch.explorer_active && ScreenSearch.IsListControlType(control_type) {
+            if ScreenSearch.TryExplorerEnterElement(element)
+                return
+        }
+        if ScreenSearch.explorer_active && ScreenSearch.IsListControlType(control_type) {
+            if ScreenSearch.TryDoubleClickElement(element)
+                return
+        }
         ScreenSearch.TryClickElement(element)
     }
 
@@ -310,6 +322,23 @@ class ScreenSearch
     static TryClickElement(element) {
         try {
             element.Click()
+            return true
+        }
+        return false
+    }
+
+    static TryDoubleClickElement(element) {
+        try {
+            element.Click("left", 2)
+            return true
+        }
+        return false
+    }
+
+    static TryExplorerEnterElement(element) {
+        try {
+            element.SetFocus()
+            Send "{Enter}"
             return true
         }
         return false
@@ -405,15 +434,23 @@ class ScreenSearch
                 try is_toggle := element.GetCachedPropertyValue(UIA.Property.IsTogglePatternAvailable)
                 try is_select := element.GetCachedPropertyValue(UIA.Property.IsSelectionItemPatternAvailable)
                 try control_type := element.GetCachedPropertyValue(UIA.Property.ControlType)
+                name := ""
+                try name := element.GetCachedPropertyValue(UIA.Property.Name)
                 if !(is_focusable || is_invoke || is_expand || is_toggle || is_select || control_type = UIA.Type.Button) {
                     continue
                 }
 
+                actionable := is_invoke || is_select || is_toggle || is_expand
                 center_x := rect.l + (width / 2)
                 center_y := rect.t + (height / 2)
-                if (rect.l < window_rect["left"] || rect.r > window_rect["right"]
-                    || rect.t < window_rect["top"] || rect.b > window_rect["bottom"])
+                if actionable {
+                    if (center_x < window_rect["left"] || center_x > window_rect["right"]
+                        || center_y < window_rect["top"] || center_y > window_rect["bottom"])
+                        continue
+                } else if (rect.l < window_rect["left"] || rect.r > window_rect["right"]
+                    || rect.t < window_rect["top"] || rect.b > window_rect["bottom"]) {
                     continue
+                }
 
                 adaptive_min_distance := Round(height * 0.6)
                 if (adaptive_min_distance < 1)
@@ -433,9 +470,15 @@ class ScreenSearch
                         min_spacing := center["min_distance"]
                     if (dx * dx + dy * dy < min_spacing * min_spacing) {
                         too_close := true
-                        if (area < center["area"] && center["area"] > best_replace_area) {
-                            best_replace_area := center["area"]
+                        if (actionable && !center["actionable"]) {
                             replace_index := center_index
+                            break
+                        }
+                        if (actionable = center["actionable"]) {
+                            if (area < center["area"] && center["area"] > best_replace_area) {
+                                best_replace_area := center["area"]
+                                replace_index := center_index
+                            }
                         }
                     }
                 }
@@ -446,13 +489,25 @@ class ScreenSearch
                             "x", center_x,
                             "y", center_y,
                             "area", area,
+                            "actionable", actionable,
                             "min_distance", adaptive_min_distance,
                             "result_index", result_index
                         )
                         results[result_index] := Map(
                             "element", element,
                             "x", center_x,
-                            "y", center_y
+                            "y", center_y,
+                            "area", area,
+                            "actionable", actionable,
+                            "control_type", control_type,
+                            "height", height,
+                            "width", width,
+                            "focusable", is_focusable,
+                            "invoke", is_invoke,
+                            "expand", is_expand,
+                            "toggle", is_toggle,
+                            "select", is_select,
+                            "name", name
                         )
                     }
                     continue
@@ -465,13 +520,25 @@ class ScreenSearch
                     "x", center_x,
                     "y", center_y,
                     "area", area,
+                    "actionable", actionable,
                     "min_distance", adaptive_min_distance,
                     "result_index", results.Length + 1
                 ))
                 results.Push(Map(
                     "element", element,
                     "x", center_x,
-                    "y", center_y
+                    "y", center_y,
+                    "area", area,
+                    "actionable", actionable,
+                    "control_type", control_type,
+                    "height", height,
+                    "width", width,
+                    "focusable", is_focusable,
+                    "invoke", is_invoke,
+                    "expand", is_expand,
+                    "toggle", is_toggle,
+                    "select", is_select,
+                    "name", name
                 ))
             }
         }
@@ -524,11 +591,20 @@ class ScreenSearch
         return Map("left", left, "top", top, "right", right, "bottom", bottom)
     }
 
+    static IsExplorerWindow(hwnd) {
+        class_name := ""
+        try class_name := WinGetClass("ahk_id " hwnd)
+        return class_name = "CabinetWClass" || class_name = "ExploreWClass"
+    }
+
 
     static RenderHints(elements) {
         ScreenSearch.DestroyGui()
         ScreenSearch.hints := Map()
         ScreenSearch.hint_labels := []
+        if ScreenSearch.explorer_active
+            elements := ScreenSearch.CollapseExplorerRows(elements)
+        elements := ScreenSearch.SortHints(elements)
         ScreenSearch.hint_elements := elements
         if (elements.Length = 0)
             return
@@ -554,6 +630,7 @@ class ScreenSearch
         virtual_width := SysGet(78)
         virtual_height := SysGet(79)
 
+        placed_rects := []
         for index, hint in elements {
             label := ScreenSearch.IndexToLabel(index - 1, label_length, hint_chars)
             label_display := StrUpper(label)
@@ -564,21 +641,224 @@ class ScreenSearch
             text_h := Round(18 * dpi_scale)
             pos_x := x - (text_w // 2) - virtual_left
             pos_y := y - (text_h // 2) - virtual_top
+            pos_x := ScreenSearch.Clamp(pos_x, 0, virtual_width - text_w)
+            pos_y := ScreenSearch.Clamp(pos_y, 0, virtual_height - text_h)
+
+            nudged := ScreenSearch.NudgeHintRect(pos_x, pos_y, text_w, text_h, placed_rects,
+                virtual_width, virtual_height)
+            pos_x := nudged["x"]
+            pos_y := nudged["y"]
+            placed_rects.Push(Map("x", pos_x, "y", pos_y, "w", text_w, "h", text_h))
 
             ctrl := ScreenSearch.gui.AddText(
                 "x" pos_x " y" pos_y " w" text_w " h" text_h " Center Background" bg_color " c" text_color,
                 label_display
             )
-            ScreenSearch.hints[label_key] := Map(
-                "element", hint["element"],
-                "control", ctrl
-            )
+        ScreenSearch.hints[label_key] := Map(
+            "element", hint["element"],
+            "control", ctrl,
+            "control_type", hint.Has("control_type") ? hint["control_type"] : 0
+        )
             ScreenSearch.hint_labels.Push(label_key)
         }
 
         ScreenSearch.gui.Show("Hide x" virtual_left " y" virtual_top " w" virtual_width " h" virtual_height)
         ScreenSearch.ApplyHintOpacity()
         ScreenSearch.gui.Show("NoActivate x" virtual_left " y" virtual_top " w" virtual_width " h" virtual_height)
+        ScreenSearch.ApplyHintOpacity()
+    }
+
+    static SortHints(elements) {
+        try elements.Sort((a, b) => ScreenSearch.CompareHints(a, b))
+        return elements
+    }
+
+    static CompareHints(a, b) {
+        a_actionable := a.Has("actionable") ? a["actionable"] : false
+        b_actionable := b.Has("actionable") ? b["actionable"] : false
+        if (a_actionable != b_actionable)
+            return a_actionable ? -1 : 1
+        a_area := a.Has("area") ? a["area"] : 0
+        b_area := b.Has("area") ? b["area"] : 0
+        if (a_area != b_area)
+            return a_area < b_area ? -1 : 1
+        if (a["y"] != b["y"])
+            return a["y"] < b["y"] ? -1 : 1
+        if (a["x"] != b["x"])
+            return a["x"] < b["x"] ? -1 : 1
+        return 0
+    }
+
+    static CollapseExplorerRows(elements) {
+        if (elements.Length <= 1)
+            return elements
+        rows := []
+        filtered := []
+        list_items := []
+        for _, element in elements {
+            control_type := element.Has("control_type") ? element["control_type"] : 0
+            if ScreenSearch.IsExplorerRowControlType(control_type)
+                list_items.Push(element)
+        }
+
+        if (list_items.Length > 0) {
+            try list_items.Sort((a, b) => ScreenSearch.CompareRowPosition(a, b))
+        }
+
+        for _, element in elements {
+            control_type := element.Has("control_type") ? element["control_type"] : 0
+            is_list_item := ScreenSearch.IsExplorerRowControlType(control_type)
+            height := element.Has("height") ? element["height"] : 0
+
+            if !is_list_item {
+                ; Avoid duplicate hint rows by skipping non-list elements that sit on list items.
+                if ScreenSearch.IsInListRow(element, list_items)
+                    continue
+                filtered.Push(element)
+                continue
+            }
+
+            matched_row := 0
+            for row_index, row in rows {
+                threshold := Max(row["height"], height) * 0.6
+                if (threshold < 10)
+                    threshold := 10
+                if (Abs(row["y"] - element["y"]) <= threshold) {
+                    matched_row := row_index
+                    break
+                }
+            }
+
+            if (matched_row = 0) {
+                rows.Push(Map(
+                    "y", element["y"],
+                    "height", height,
+                    "best", element
+                ))
+                continue
+            }
+
+            row := rows[matched_row]
+            if ScreenSearch.IsBetterExplorerRowCandidate(element, row["best"]) {
+                row["best"] := element
+            }
+        }
+
+        for _, row in rows {
+            filtered.Push(row["best"])
+        }
+
+        if ScreenSearch.ShouldDebugLog() {
+            ScreenSearch.LogExplorerRows(rows)
+        }
+
+        return filtered
+    }
+
+    static IsInListRow(element, list_items) {
+        if (list_items.Length = 0)
+            return false
+        for _, list_item in list_items {
+            y_threshold := Max(list_item["height"], element.Has("height") ? element["height"] : 0) * 0.6
+            if (y_threshold < 10)
+                y_threshold := 10
+            x_threshold := Max(list_item.Has("width") ? list_item["width"] : 0,
+                element.Has("width") ? element["width"] : 0) * 0.6
+            if (x_threshold < 40)
+                x_threshold := 40
+            if (Abs(list_item["y"] - element["y"]) <= y_threshold
+                && Abs(list_item["x"] - element["x"]) <= x_threshold)
+                return true
+        }
+        return false
+    }
+
+    static IsListControlType(control_type) {
+        return control_type = UIA.Type.ListItem || control_type = UIA.Type.TreeItem || control_type = UIA.Type.DataItem
+    }
+
+    static IsExplorerRowControlType(control_type) {
+        return control_type = UIA.Type.ListItem || control_type = UIA.Type.DataItem
+    }
+
+    static CompareRowPosition(a, b) {
+        if (a["y"] != b["y"])
+            return a["y"] < b["y"] ? -1 : 1
+        if (a["x"] != b["x"])
+            return a["x"] < b["x"] ? -1 : 1
+        return 0
+    }
+
+    static IsBetterExplorerRowCandidate(candidate, current) {
+        if !current
+            return true
+        candidate_rank := ScreenSearch.PatternRank(candidate)
+        current_rank := ScreenSearch.PatternRank(current)
+        if (candidate_rank != current_rank)
+            return candidate_rank > current_rank
+        candidate_area := candidate.Has("area") ? candidate["area"] : 0
+        current_area := current.Has("area") ? current["area"] : 0
+        if (candidate_area != current_area)
+            return candidate_area < current_area
+        return false
+    }
+
+    static PatternRank(element) {
+        if element.Has("select") && element["select"]
+            return 4
+        if element.Has("invoke") && element["invoke"]
+            return 3
+        if (element.Has("toggle") && element["toggle"]) || (element.Has("expand") && element["expand"])
+            return 2
+        if element.Has("focusable") && element["focusable"]
+            return 1
+        return 0
+    }
+
+    static ShouldDebugLog() {
+        global Config
+        return Config.Has("screen_search") && Config["screen_search"]["debug_log"]
+    }
+
+    static ResetDebugLog() {
+        if !ScreenSearch.ShouldDebugLog()
+            return
+        log_path := ScreenSearch.DebugLogPath()
+        try FileDelete(log_path)
+    }
+
+    static DebugLogPath() {
+        return A_AppData "\harken\screen_search.debug.log"
+    }
+
+    static LogExplorerRows(rows) {
+        if !ScreenSearch.ShouldDebugLog()
+            return
+        log_path := ScreenSearch.DebugLogPath()
+        output := "Explorer rows: " rows.Length
+        for _, row in rows {
+            best := row["best"]
+            output .= "`n" ScreenSearch.DescribeElement(best)
+        }
+        FileAppend(output "`n", log_path)
+    }
+
+    static DescribeElement(element) {
+        name := element.Has("name") ? element["name"] : ""
+        control_type := element.Has("control_type") ? element["control_type"] : 0
+        line := "row y=" element["y"] " x=" element["x"] " type=" control_type " name=" name
+        line .= " select=" ScreenSearch.BoolStr(element, "select")
+        line .= " invoke=" ScreenSearch.BoolStr(element, "invoke")
+        line .= " toggle=" ScreenSearch.BoolStr(element, "toggle")
+        line .= " expand=" ScreenSearch.BoolStr(element, "expand")
+        line .= " focusable=" ScreenSearch.BoolStr(element, "focusable")
+        return line
+    }
+
+    static BoolStr(element, key) {
+        if element.Has(key) && element[key]
+            return "1"
+        return "0"
     }
 
     static ApplyHintOpacity() {
@@ -612,6 +892,69 @@ class ScreenSearch
         loop parse, hint_chars
             chars.Push(A_LoopField)
         return chars
+    }
+
+    static Clamp(value, min_value, max_value) {
+        if (value < min_value)
+            return min_value
+        if (value > max_value)
+            return max_value
+        return value
+    }
+
+    static NudgeHintRect(x, y, w, h, placed_rects, bounds_w, bounds_h) {
+        if (placed_rects.Length = 0)
+            return Map("x", x, "y", y)
+
+        if !ScreenSearch.RectIntersectsAny(x, y, w, h, placed_rects)
+            return Map("x", x, "y", y)
+
+        step := 8
+        max_rings := 6
+        offsets := [
+            [0, -1],
+            [-1, 0],
+            [-1, -1],
+            [1, 0],
+            [0, 1],
+            [1, 1],
+            [1, -1],
+            [-1, 1]
+        ]
+
+        loop max_rings {
+            radius := A_Index * step
+            for _, dir in offsets {
+                candidate_x := x + (dir[1] * radius)
+                candidate_y := y + (dir[2] * radius)
+                candidate_x := ScreenSearch.Clamp(candidate_x, 0, bounds_w - w)
+                candidate_y := ScreenSearch.Clamp(candidate_y, 0, bounds_h - h)
+                if !ScreenSearch.RectIntersectsAny(candidate_x, candidate_y, w, h, placed_rects)
+                    return Map("x", candidate_x, "y", candidate_y)
+            }
+        }
+
+        return Map("x", x, "y", y)
+    }
+
+    static RectIntersectsAny(x, y, w, h, placed_rects) {
+        for _, rect in placed_rects {
+            if ScreenSearch.RectsOverlap(x, y, w, h, rect["x"], rect["y"], rect["w"], rect["h"])
+                return true
+        }
+        return false
+    }
+
+    static RectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2) {
+        if (x1 + w1 <= x2)
+            return false
+        if (x2 + w2 <= x1)
+            return false
+        if (y1 + h1 <= y2)
+            return false
+        if (y2 + h2 <= y1)
+            return false
+        return true
     }
 
     static ComputeLabelLength(count, base) {

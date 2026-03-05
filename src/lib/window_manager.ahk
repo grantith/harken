@@ -578,7 +578,11 @@ class Gui_Guides
     {
         if !this.gui
             return
-        if !WinExist("ahk_id " this.gui.Hwnd)
+        hwnd := 0
+        try hwnd := this.gui.Hwnd
+        catch
+            return
+        if !hwnd || !WinExist("ahk_id " hwnd)
             return
         this.gui.GetPos(,, &width, &height)                             ; get position of gui
         WinSetRegion('0-0 w' width ' h' height ' r'                     ; use position to round the corners

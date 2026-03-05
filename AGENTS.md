@@ -108,6 +108,9 @@ Comment the "why" in and around code to help provide context from the instructio
 - Avoid breaking changes without a migration path.
 - Keep new features optional and discoverable.
 - Keep `README.md` and `AGENTS.md` aligned with current behavior.
+- Maintain `CHANGELOG.md` for user-facing changes:
+  - Add entries under `Unreleased` as part of feature/behavior work.
+  - Move entries into a versioned section when cutting a release.
 
 ## Suggested Manual Checks
 - Launch `harken.ahk` with a clean `harken.toml` and verify hotkeys.

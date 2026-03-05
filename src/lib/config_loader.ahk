@@ -109,7 +109,8 @@ ConfigSchema() {
             "max_results", "number",
             "min_size_px", "number",
             "min_distance_px", "number",
-            "hint_opacity", "number"
+            "hint_opacity", "number",
+            "debug_log", "bool"
         ),
         "window_manager", Map(
             "grid_size", "number",
@@ -128,6 +129,11 @@ ConfigSchema() {
             "ensure_count", "number",
             "cycle_prefer_current", "bool",
             "scroll_switch", "bool",
+            "switch_curtain", Map(
+                "enabled", "bool",
+                "opacity", "number",
+                "color", "string"
+            ),
             "prev_hotkey", "string",
             "next_hotkey", "string",
             "move_prev_hotkey", "string",

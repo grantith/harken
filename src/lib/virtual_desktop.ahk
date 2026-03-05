@@ -10,6 +10,118 @@ VirtualDesktopEnabled() {
     return Config["virtual_desktop"]["enabled"]
 }
 
+SwitchCurtainEnabled() {
+    global Config
+    if !VirtualDesktopEnabled()
+        return false
+    if !Config["virtual_desktop"].Has("switch_curtain")
+        return false
+    curtain := Config["virtual_desktop"]["switch_curtain"]
+    if !(curtain is Map)
+        return false
+    if !curtain.Has("enabled")
+        return false
+    return curtain["enabled"]
+}
+
+SwitchCurtainOpacity() {
+    global Config
+    opacity := 204
+    if Config["virtual_desktop"].Has("switch_curtain") {
+        curtain := Config["virtual_desktop"]["switch_curtain"]
+        if (curtain is Map && curtain.Has("opacity"))
+            opacity := curtain["opacity"]
+    }
+    if !(opacity is Number)
+        opacity := 204
+    return Max(0, Min(255, Round(opacity)))
+}
+
+SwitchCurtainColor() {
+    global Config
+    color := "#202020"
+    if Config["virtual_desktop"].Has("switch_curtain") {
+        curtain := Config["virtual_desktop"]["switch_curtain"]
+        if (curtain is Map && curtain.Has("color"))
+            color := curtain["color"]
+    }
+    return NormalizeHexColor(color, "202020")
+}
+
+NormalizeHexColor(value, fallback) {
+    if !(value is String)
+        return fallback
+    trimmed := Trim(value)
+    if (SubStr(trimmed, 1, 1) = "#")
+        trimmed := SubStr(trimmed, 2)
+    if (StrLen(trimmed) = 8 && RegExMatch(trimmed, "i)^0x[0-9a-f]{6}$"))
+        return SubStr(trimmed, 3)
+    if (StrLen(trimmed) = 6 && RegExMatch(trimmed, "i)^[0-9a-f]{6}$"))
+        return trimmed
+    return fallback
+}
+
+GetVirtualScreenBounds(&left, &top, &width, &height) {
+    try {
+        left := SysGet(76)
+        top := SysGet(77)
+        width := SysGet(78)
+        height := SysGet(79)
+    } catch {
+        left := 0
+        top := 0
+        width := A_ScreenWidth
+        height := A_ScreenHeight
+    }
+    if (width <= 0 || height <= 0) {
+        left := 0
+        top := 0
+        width := A_ScreenWidth
+        height := A_ScreenHeight
+    }
+}
+
+global switch_curtain_gui := ""
+global switch_curtain_visible := false
+
+ShowSwitchCurtain() {
+    global switch_curtain_gui, switch_curtain_visible
+    if !SwitchCurtainEnabled()
+        return false
+    if !switch_curtain_gui {
+        switch_curtain_gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20", "harken Desktop Switch")
+        switch_curtain_gui.MarginX := 0
+        switch_curtain_gui.MarginY := 0
+        switch_curtain_gui.BackColor := SwitchCurtainColor()
+    }
+    GetVirtualScreenBounds(&left, &top, &width, &height)
+    switch_curtain_gui.BackColor := SwitchCurtainColor()
+    switch_curtain_gui.Show("NoActivate x" left " y" top " w" width " h" height)
+    WinSetTransparent(SwitchCurtainOpacity(), switch_curtain_gui)
+    switch_curtain_visible := true
+    return true
+}
+
+HideSwitchCurtain() {
+    global switch_curtain_gui, switch_curtain_visible
+    if !switch_curtain_gui
+        return
+    switch_curtain_gui.Hide()
+    switch_curtain_visible := false
+}
+
+BeginDesktopSwitchCurtain() {
+    if !SwitchCurtainEnabled()
+        return false
+    return ShowSwitchCurtain()
+}
+
+EndDesktopSwitchCurtain(was_shown := false) {
+    if !was_shown
+        return
+    HideSwitchCurtain()
+}
+
 global vd_auto_assign_timer := 0
 
 VirtualDesktopTrayEnabled() {
@@ -147,8 +259,13 @@ TryAutoAssignWindow(hwnd) {
             follow_on_spawn := app["follow_on_spawn"]
         VD.MoveWindowToDesktopNum("ahk_id " hwnd, target_desktop, follow_on_spawn)
         if follow_on_spawn {
-            VD.goToDesktopNum(target_desktop)
-            VD.WaitDesktopSwitched(target_desktop)
+            curtain_visible := BeginDesktopSwitchCurtain()
+            try {
+                VD.goToDesktopNum(target_desktop)
+                VD.WaitDesktopSwitched(target_desktop)
+            } finally {
+                EndDesktopSwitchCurtain(curtain_visible)
+            }
         }
         return
     }
@@ -456,6 +573,7 @@ ActivateWindowAcrossDesktops(hwnd) {
         desktop_num := GetWindowDesktopNum(hwnd)
         current_desktop := GetCurrentDesktopNumFresh()
         if (desktop_num > 0 && desktop_num != current_desktop) {
+            curtain_visible := BeginDesktopSwitchCurtain()
             try {
                 VD.goToDesktopOfWindow("ahk_id " hwnd, true)
             } catch as err {
@@ -465,9 +583,12 @@ ActivateWindowAcrossDesktops(hwnd) {
                         LogDesktopFocusDebug("switch_fallback", hwnd, desktop_num)
                     VD.goToDesktopNum(desktop_num)
                     VD.WaitDesktopSwitched(desktop_num)
-                } catch
+                } catch {
                     LogDesktopFocusDebug("switch_failed", hwnd, desktop_num)
                     return 0
+                }
+            } finally {
+                EndDesktopSwitchCurtain(curtain_visible)
             }
             try {
                 if VirtualDesktopFocusDebugEnabled()
@@ -483,7 +604,12 @@ ActivateWindowAcrossDesktops(hwnd) {
             try {
                 if VirtualDesktopFocusDebugEnabled()
                     LogDesktopFocusDebug("switch_unknown", hwnd, desktop_num)
-                VD.goToDesktopOfWindow("ahk_id " hwnd, true)
+                curtain_visible := BeginDesktopSwitchCurtain()
+                try {
+                    VD.goToDesktopOfWindow("ahk_id " hwnd, true)
+                } finally {
+                    EndDesktopSwitchCurtain(curtain_visible)
+                }
                 try {
                     WinActivate "ahk_id " hwnd
                     return WinGetID("A")

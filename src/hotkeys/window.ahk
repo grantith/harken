@@ -798,8 +798,13 @@ GoToRelativeDesktop(delta) {
     target := VD.modulusResolveDesktopNum(current + delta)
     LogVirtualDesktopAction("goto_relative current=" current " delta=" delta " target=" target)
     RefreshVirtualDesktopState()
-    VD.goToDesktopNum(target)
-    VD.WaitDesktopSwitched(target)
+    curtain_visible := BeginDesktopSwitchCurtain()
+    try {
+        VD.goToDesktopNum(target)
+        VD.WaitDesktopSwitched(target)
+    } finally {
+        EndDesktopSwitchCurtain(curtain_visible)
+    }
     RefreshVirtualDesktopState()
 }
 
@@ -811,8 +816,13 @@ GoToDesktopNumber(desktop_num) {
     LogVirtualDesktopAction("goto_absolute target=" desktop_num " current=" GetCurrentDesktopNumFresh())
     RefreshVirtualDesktopState()
     GetCurrentDesktopNumFresh()
-    VD.goToDesktopNum(desktop_num)
-    VD.WaitDesktopSwitched(desktop_num)
+    curtain_visible := BeginDesktopSwitchCurtain()
+    try {
+        VD.goToDesktopNum(desktop_num)
+        VD.WaitDesktopSwitched(desktop_num)
+    } finally {
+        EndDesktopSwitchCurtain(curtain_visible)
+    }
     RefreshVirtualDesktopState()
 }
 
@@ -828,8 +838,13 @@ MoveWindowToRelativeDesktop(delta) {
     target := VD.modulusResolveDesktopNum(current + delta)
     LogVirtualDesktopAction("move_relative current=" current " delta=" delta " target=" target)
     RefreshVirtualDesktopState()
-    VD.MoveWindowToDesktopNum("A", target, true)
-    VD.WaitDesktopSwitched(target)
+    curtain_visible := BeginDesktopSwitchCurtain()
+    try {
+        VD.MoveWindowToDesktopNum("A", target, true)
+        VD.WaitDesktopSwitched(target)
+    } finally {
+        EndDesktopSwitchCurtain(curtain_visible)
+    }
     RefreshVirtualDesktopState()
 }
 
@@ -841,8 +856,13 @@ MoveWindowToDesktopNumber(desktop_num) {
     LogVirtualDesktopAction("move_absolute target=" desktop_num " current=" GetCurrentDesktopNumFresh())
     RefreshVirtualDesktopState()
     GetCurrentDesktopNumFresh()
-    VD.MoveWindowToDesktopNum("A", desktop_num, true)
-    VD.WaitDesktopSwitched(desktop_num)
+    curtain_visible := BeginDesktopSwitchCurtain()
+    try {
+        VD.MoveWindowToDesktopNum("A", desktop_num, true)
+        VD.WaitDesktopSwitched(desktop_num)
+    } finally {
+        EndDesktopSwitchCurtain(curtain_visible)
+    }
     RefreshVirtualDesktopState()
 }
 

@@ -587,8 +587,13 @@ TryMoveAppWindowToDesktop(win_title, app_config, target_desktop, follow_on_spawn
     if (hwnd) {
         VD.MoveWindowToDesktopNum("ahk_id " hwnd, target_desktop, follow_on_spawn)
         if follow_on_spawn {
-            VD.goToDesktopNum(target_desktop)
-            VD.WaitDesktopSwitched(target_desktop)
+            curtain_visible := BeginDesktopSwitchCurtain()
+            try {
+                VD.goToDesktopNum(target_desktop)
+                VD.WaitDesktopSwitched(target_desktop)
+            } finally {
+                EndDesktopSwitchCurtain(curtain_visible)
+            }
         }
         try {
             assigned_desktop := GetWindowDesktopNum(hwnd)

@@ -176,13 +176,14 @@ Add `debug = true` under `match.process_tree` to log process tree details to
 | Shortcut | Action |
 | --- | --- |
 | `super + alt + h/l` | Previous/next desktop |
-| `super + alt + WheelUp/WheelDown` | Previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
+| `super + WheelUp/WheelDown` | Previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
 | `super + alt + shift + h/l` | Move window to previous/next desktop (follow) |
 | `super + alt + shift + WheelUp/WheelDown` | Move window to previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
 | `super + alt + <key>` | Go to mapped desktop (`[[virtual_desktop.<N>]]`) |
 | `super + alt + shift + <key>` | Move window to mapped desktop (follow) |
 | `virtual_desktop.auto_assign` | Move newly created windows that match `apps[]` with `desktop` set |
 | `virtual_desktop.debug_focus` | Log cross-desktop focus attempts to `%APPDATA%\harken\vd.focus.debug.log` |
+| `virtual_desktop.switch_curtain` | Dim overlay during desktop switches to reduce flicker |
 
 #### Apps (defaults)
 
@@ -205,6 +206,7 @@ These are examples for the launch-or-focus keybindings.
 | `w` | Open a new window for the active app |
 | `n` | Toggle command overlay |
 | `i` | Open window inspector |
+| `m` | Enter move mode |
 | `Esc` | Exit command mode |
 
 
@@ -235,6 +237,7 @@ max_results = 200
 min_size_px = 12
 min_distance_px = 40
 hint_opacity = 235
+debug_log = false
 ```
 
 ## Limitations

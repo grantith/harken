@@ -122,7 +122,8 @@ DefaultConfig() {
             "max_results", 200,
             "min_size_px", 12,
             "min_distance_px", 40,
-            "hint_opacity", 235
+            "hint_opacity", 235,
+            "debug_log", false
         ),
         "config_watch", Map(
             "enabled", false,
@@ -145,6 +146,11 @@ DefaultConfig() {
             "ensure_count", 0,
             "cycle_prefer_current", true,
             "scroll_switch", false,
+            "switch_curtain", Map(
+                "enabled", true,
+                "opacity", 204,
+                "color", "#202020"
+            ),
             "prev_hotkey", "h",
             "next_hotkey", "l",
             "move_prev_hotkey", "h",
