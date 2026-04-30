@@ -1,3 +1,4 @@
+; App hotkey bindings (launch or focus).
 global Config
 
 HotIf IsSuperKeyPressed

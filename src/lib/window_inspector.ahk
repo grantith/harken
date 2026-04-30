@@ -1,20 +1,26 @@
 #Requires AutoHotkey v2.0
 
+; Window inspector UI for titles/classes/PIDs.
 ShowWindowInspector() {
     static inspector_gui := ""
     static window_list := ""
     static refresh_timer := 0
+    static refresh_paused := true
+    static auto_refresh_btn := ""
 
     if inspector_gui {
         inspector_gui.Show()
         RefreshList(window_list)
-        StartAutoRefresh(window_list, &refresh_timer)
+        UpdateAutoRefreshButton(auto_refresh_btn, refresh_paused)
+        if !refresh_paused
+            StartAutoRefresh(window_list, &refresh_timer)
         return
     }
 
     inspector_gui := Gui("+Resize", "harken Window Inspector")
     inspector_gui.SetFont("s10", "Segoe UI")
 
+    ; Include active column and auto-refresh to reflect focus changes.
     window_list := inspector_gui.AddListView("w1020 r26 Grid", ["Active", "Title", "Exe", "Class", "PID", "HWND"])
     window_list.ModifyCol(1, 60)
     window_list.ModifyCol(2, 380)
@@ -35,11 +41,16 @@ ShowWindowInspector() {
     export_btn := inspector_gui.AddButton("x+10 yp w140", "Export File")
     export_btn.OnEvent("Click", (*) => ExportAll(window_list))
 
+    auto_refresh_btn := inspector_gui.AddButton("x+10 yp w160", "Resume Auto Refresh")
+    auto_refresh_btn.OnEvent("Click", (*) => ToggleAutoRefresh(window_list, &refresh_timer, &refresh_paused, auto_refresh_btn))
+
     inspector_gui.OnEvent("Close", (*) => HideInspector(inspector_gui, &refresh_timer))
     inspector_gui.Show()
 
     RefreshList(window_list)
-    StartAutoRefresh(window_list, &refresh_timer)
+    UpdateAutoRefreshButton(auto_refresh_btn, refresh_paused)
+    if !refresh_paused
+        StartAutoRefresh(window_list, &refresh_timer)
 }
 
 RefreshList(window_list) {
@@ -68,6 +79,23 @@ HideInspector(inspector_gui, &refresh_timer) {
     if refresh_timer
         SetTimer(refresh_timer, 0)
     inspector_gui.Hide()
+}
+
+ToggleAutoRefresh(window_list, &refresh_timer, &refresh_paused, auto_refresh_btn) {
+    refresh_paused := !refresh_paused
+    if refresh_paused {
+        if refresh_timer
+            SetTimer(refresh_timer, 0)
+    } else {
+        StartAutoRefresh(window_list, &refresh_timer)
+    }
+    UpdateAutoRefreshButton(auto_refresh_btn, refresh_paused)
+}
+
+UpdateAutoRefreshButton(auto_refresh_btn, refresh_paused) {
+    if !auto_refresh_btn
+        return
+    auto_refresh_btn.Text := refresh_paused ? "Resume Auto Refresh" : "Pause Auto Refresh"
 }
 
 CopySelected(window_list) {

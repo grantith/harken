@@ -1,3 +1,4 @@
+; Unbound hotkey helper + reserved key detection.
 global Config
 
 RegisterUnboundHotkeys() {
@@ -16,9 +17,8 @@ RegisterUnboundHotkeys() {
     AddUsedKey(used_keys, "o")
     AddUsedKey(used_keys, "n")
 
-    reload_config := Config["reload"]
-    if reload_config["enabled"] && reload_config["super_key_required"]
-        AddUsedKey(used_keys, reload_config["hotkey"])
+    if Config.Has("screen_search") && Config["screen_search"]["enabled"]
+        AddUsedKey(used_keys, Config["screen_search"]["hotkey"])
 
     for _, app in Config["apps"] {
         if app.Has("hotkey") && app["hotkey"] != ""

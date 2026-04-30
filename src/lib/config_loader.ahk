@@ -1,6 +1,8 @@
+; Config loading + schema validation + normalization.
 LoadConfig(config_path, default_config := Map()) {
     config := CloneMap(default_config)
     errors := []
+    warnings := []
 
     if FileExist(config_path) {
         try {
@@ -10,21 +12,24 @@ LoadConfig(config_path, default_config := Map()) {
             errors.Push("config.parse: " err.Message)
             return Map(
                 "config", config,
-                "errors", errors
+                "errors", errors,
+                "warnings", warnings
             )
         }
     }
 
     NormalizeSuperKeyConfig(config)
     NormalizeVirtualDesktopConfig(config)
-    errors := ValidateConfig(config, ConfigSchema())
+    NormalizeAppsConfig(config, errors)
+    ValidateConfig(config, ConfigSchema(), errors, warnings)
     ValidateSuperKeys(config, errors)
     ValidateApps(config, errors)
     ValidateVirtualDesktopHotkeys(config, errors)
 
     return Map(
         "config", config,
-        "errors", errors
+        "errors", errors,
+        "warnings", warnings
     )
 }
 
@@ -42,13 +47,23 @@ ConfigSchema() {
                 "class", OptionalSpec("string"),
                 "class_regex", OptionalSpec("bool"),
                 "title", OptionalSpec("string"),
-                "title_regex", OptionalSpec("bool")
+                "title_regex", OptionalSpec("bool"),
+                "process_tree", OptionalSpec(Map(
+                    "mode", OptionalSpec("string"),
+                    "exe", OptionalSpec(["string"]),
+                    "exe_regex", OptionalSpec("bool"),
+                    "max_depth", OptionalSpec("number"),
+                    "negate", OptionalSpec("bool"),
+                    "debug", OptionalSpec("bool")
+                ))
             )),
             "run", OptionalSpec("string"),
             "run_start_in", OptionalSpec("string"),
             "run_paths", OptionalSpec(["string"]),
             "desktop", OptionalSpec("number"),
             "follow_on_spawn", OptionalSpec("bool"),
+            "ignore_classes", OptionalSpec(["string"]),
+            "exclude_titles", OptionalSpec(["string"]),
             "focus_border", OptionalSpec(Map(
                 "border_color", OptionalSpec("string"),
                 "move_mode_color", OptionalSpec("string"),
@@ -87,6 +102,16 @@ ConfigSchema() {
             "include_minimized", "bool",
             "close_on_focus_loss", "bool"
         ),
+        "screen_search", Map(
+            "enabled", "bool",
+            "hotkey", "string",
+            "hint_chars", "string",
+            "max_results", "number",
+            "min_size_px", "number",
+            "min_distance_px", "number",
+            "hint_opacity", "number",
+            "debug_log", "bool"
+        ),
         "window_manager", Map(
             "grid_size", "number",
             "margins", Map(
@@ -103,6 +128,12 @@ ConfigSchema() {
             "switch_on_focus", "bool",
             "ensure_count", "number",
             "cycle_prefer_current", "bool",
+            "scroll_switch", "bool",
+            "switch_curtain", Map(
+                "enabled", "bool",
+                "opacity", "number",
+                "color", "string"
+            ),
             "prev_hotkey", "string",
             "next_hotkey", "string",
             "move_prev_hotkey", "string",
@@ -121,8 +152,11 @@ ConfigSchema() {
             )],
             "debug_cycle", "bool",
             "debug_hotkeys", "bool",
+            "debug_focus", OptionalSpec("bool"),
             "tray_indicator", "bool",
             "tray_format", "string",
+            "auto_assign", "bool",
+            "auto_assign_interval_ms", "number",
             "desktop_hotkeys_duplicates", OptionalSpec([Map(
                 "hotkey", "string",
                 "desktop", "number",
@@ -153,23 +187,15 @@ ConfigSchema() {
             "enabled", "bool",
             "overlay_opacity", "number"
         ),
-        "reload", Map(
+        "config_watch", Map(
             "enabled", "bool",
-            "hotkey", "string",
-            "super_key_required", "bool",
-            "watch_enabled", "bool",
-            "watch_interval_ms", "number",
-            "mode_enabled", "bool",
-            "mode_hotkey", "string",
-            "mode_timeout_ms", "number"
+            "interval_ms", "number"
         )
     )
 }
 
-ValidateConfig(config, schema) {
-    errors := []
-    ValidateNode(config, schema, "config", errors)
-    return errors
+ValidateConfig(config, schema, errors, warnings) {
+    ValidateNode(config, schema, "config", errors, warnings)
 }
 
 NormalizeSuperKeyConfig(config) {
@@ -180,6 +206,53 @@ NormalizeSuperKeyConfig(config) {
     if (super_value is String)
         config["super_key"] := [super_value]
 }
+
+NormalizeAppsConfig(config, errors) {
+    if !config.Has("apps")
+        return
+
+    apps := config["apps"]
+    if (apps is Array)
+        return
+
+    if !(apps is Map) {
+        errors.Push("config.apps should be an array or object")
+        return
+    }
+
+    normalized := []
+    for app_id, app_config in apps {
+        if !(app_config is Map) {
+            errors.Push("config.apps." app_id " should be an object")
+            continue
+        }
+        if app_config.Has("id") {
+            errors.Push("config.apps." app_id " should not set id when using named tables")
+            app_config.Delete("id")
+        }
+        app_config["id"] := app_id
+        NormalizeAppProcessTreeConfig(app_config)
+        normalized.Push(app_config)
+    }
+
+    config["apps"] := normalized
+}
+
+NormalizeAppProcessTreeConfig(app_config) {
+    if !(app_config is Map)
+        return
+    if !app_config.Has("match") || !(app_config["match"] is Map)
+        return
+    match := app_config["match"]
+    if !match.Has("process_tree") || !(match["process_tree"] is Map)
+        return
+    process_tree := match["process_tree"]
+    if process_tree.Has("exe") && (process_tree["exe"] is String)
+        process_tree["exe"] := [process_tree["exe"]]
+    if !process_tree.Has("mode") || process_tree["mode"] = ""
+        process_tree["mode"] := "descendant"
+}
+
 
 NormalizeVirtualDesktopConfig(config) {
     if !config.Has("virtual_desktop") || !(config["virtual_desktop"] is Map)
@@ -270,8 +343,9 @@ ValidateApps(config, errors) {
             has_exe := match.Has("exe") && (match["exe"] != "")
             has_class := match.Has("class") && (match["class"] != "")
             has_title := match.Has("title") && (match["title"] != "")
-            if !has_exe && !has_class && !has_title
-                errors.Push("config.apps[" index "].match must define exe, class, or title")
+            has_process_tree := match.Has("process_tree") && (match["process_tree"] is Map)
+            if !has_exe && !has_class && !has_title && !has_process_tree
+                errors.Push("config.apps[" index "].match must define exe, class, title, or process_tree")
 
             if (match.Has("exe_regex") && !has_exe)
                 errors.Push("config.apps[" index "].match.exe_regex requires exe")
@@ -279,6 +353,20 @@ ValidateApps(config, errors) {
                 errors.Push("config.apps[" index "].match.class_regex requires class")
             if (match.Has("title_regex") && !has_title)
                 errors.Push("config.apps[" index "].match.title_regex requires title")
+
+            if has_process_tree {
+                process_tree := match["process_tree"]
+                has_tree_exe := process_tree.Has("exe") && (process_tree["exe"] is Array) && process_tree["exe"].Length
+                if !has_tree_exe
+                    errors.Push("config.apps[" index "].match.process_tree.exe must define one or more executables")
+                if process_tree.Has("exe_regex") && !has_tree_exe
+                    errors.Push("config.apps[" index "].match.process_tree.exe_regex requires exe")
+                mode := process_tree.Has("mode") ? process_tree["mode"] : "descendant"
+                if (mode != "ancestor" && mode != "descendant" && mode != "either")
+                    errors.Push("config.apps[" index "].match.process_tree.mode must be ancestor, descendant, or either")
+                if process_tree.Has("max_depth") && (process_tree["max_depth"] < 0)
+                    errors.Push("config.apps[" index "].match.process_tree.max_depth must be >= 0")
+            }
         }
     }
 }
@@ -300,12 +388,12 @@ ValidateVirtualDesktopHotkeys(config, errors) {
     }
 }
 
-ValidateNode(value, spec, path, errors) {
+ValidateNode(value, spec, path, errors, warnings) {
     if (spec is Map) {
         if spec.Has("__optional__") {
             if (value = "")
                 return
-            return ValidateNode(value, spec["spec"], path, errors)
+            return ValidateNode(value, spec["spec"], path, errors, warnings)
         }
         if !(value is Map) {
             errors.Push(path " should be an object")
@@ -322,13 +410,13 @@ ValidateNode(value, spec, path, errors) {
 
         for key, val in value {
             if !spec.Has(key) {
-                errors.Push(path "." key " is unknown")
+                warnings.Push(path "." key " is unknown")
                 continue
             }
             if (spec[key] is Map && spec[key].Has("__optional__") && spec[key]["__optional__"]) {
-                ValidateNode(val, spec[key]["spec"], path "." key, errors)
+                ValidateNode(val, spec[key]["spec"], path "." key, errors, warnings)
             } else {
-                ValidateNode(val, spec[key], path "." key, errors)
+                ValidateNode(val, spec[key], path "." key, errors, warnings)
             }
         }
         return
@@ -343,7 +431,7 @@ ValidateNode(value, spec, path, errors) {
             return
         item_spec := spec[1]
         for i, item in value {
-            ValidateNode(item, item_spec, path "[" i "]", errors)
+            ValidateNode(item, item_spec, path "[" i "]", errors, warnings)
         }
         return
     }

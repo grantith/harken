@@ -32,6 +32,9 @@ Single test / focused run:
   - If virtual desktops touched: test `super+alt+h/l`, mapped desktop hotkeys, and tray indicator.
 
 ## Code Style Guidelines
+
+Comment the "why" in and around code to help provide context from the instructions and conversations leading to changes.
+
 ### AutoHotkey version and file headers
 - Use AutoHotkey v2 syntax and conventions.
 - Virtual desktop integration requires AutoHotkey v2.1 alpha (VD.ahk dependency).
@@ -105,10 +108,13 @@ Single test / focused run:
 - Avoid breaking changes without a migration path.
 - Keep new features optional and discoverable.
 - Keep `README.md` and `AGENTS.md` aligned with current behavior.
+- Maintain `CHANGELOG.md` for user-facing changes:
+  - Add entries under `Unreleased` as part of feature/behavior work.
+  - Move entries into a versioned section when cutting a release.
 
 ## Suggested Manual Checks
 - Launch `harken.ahk` with a clean `harken.toml` and verify hotkeys.
-- Validate reload flow (normal hotkey and command mode).
+- Validate reload flow (command mode).
 - Confirm Command Overlay and helper tools still open and update.
 - If touching config schema, ensure errors log correctly in `%APPDATA%\harken\config.errors.log`.
 - If touching tray indicator: confirm tray icon updates on desktop change.

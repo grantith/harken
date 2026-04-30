@@ -16,6 +16,7 @@
 global Config
 
 
+; Window manager utilities: grid math, move/resize, exceptions.
 class Window
 {
     ;-------------------------------------------------------------------------------
@@ -575,6 +576,14 @@ class Gui_Guides
 
     CornerRadius(curve := 15)
     {
+        if !this.gui
+            return
+        hwnd := 0
+        try hwnd := this.gui.Hwnd
+        catch
+            return
+        if !hwnd || !WinExist("ahk_id " hwnd)
+            return
         this.gui.GetPos(,, &width, &height)                             ; get position of gui
         WinSetRegion('0-0 w' width ' h' height ' r'                     ; use position to round the corners
         curve '-' curve, this.gui)                                      ; using this curve value

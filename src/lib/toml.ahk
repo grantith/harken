@@ -1,3 +1,4 @@
+; Minimal TOML parser/loader used for config.
 TomlLoadFile(file_path) {
     toml_text := FileRead(file_path, "UTF-8")
     return TomlParse(toml_text)

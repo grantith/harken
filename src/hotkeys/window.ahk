@@ -5,10 +5,12 @@ move_step := Config["window"]["move_step"]
 super_double_tap_ms := Config["window"]["super_double_tap_ms"]
 move_mode_enabled := Config["window"]["move_mode"]["enable"]
 move_mode_cancel_key := Config["window"]["move_mode"]["cancel_key"]
+; Window hotkeys (resize/move/cycle) and virtual desktop bindings.
 center_cycle_hotkey := Config["window"]["center_width_cycle_hotkey"]
 cycle_app_windows_hotkey := Config["window"]["cycle_app_windows_hotkey"]
 cycle_app_windows_current_hotkey := Config["window"]["cycle_app_windows_current_hotkey"]
 vd_config := Config.Has("virtual_desktop") ? Config["virtual_desktop"] : Map()
+vd_scroll_switch := vd_config.Has("scroll_switch") ? vd_config["scroll_switch"] : false
 vd_prev_hotkey := vd_config.Has("prev_hotkey") ? vd_config["prev_hotkey"] : ""
 vd_next_hotkey := vd_config.Has("next_hotkey") ? vd_config["next_hotkey"] : ""
 vd_move_prev_hotkey := vd_config.Has("move_prev_hotkey") ? vd_config["move_prev_hotkey"] : ""
@@ -198,13 +200,39 @@ FilterWindowList(exe, list) {
         if VirtualDesktopEnabled() {
             desktop_num := GetWindowDesktopNum(id)
             if (desktop_num <= 0)
-                allow_invisible := true
-            else if (desktop_num != VD.getCurrentDesktopNum())
+                continue
+            if (desktop_num > 0 && desktop_num != VD.getCurrentDesktopNum())
                 allow_invisible := true
         }
         if (!allow_invisible && !(style & 0x10000000))
             continue
         filtered.Push(id)
+    }
+    return filtered
+}
+
+FilterExcludedCycleWindows(list, app_config := "") {
+    if !(app_config is Map)
+        return list
+    if !app_config.Has("exclude_titles") || !(app_config["exclude_titles"] is Array)
+        return list
+
+    filtered := []
+    for _, id in list {
+        if !AppConfigExcludesTitle(app_config, id)
+            filtered.Push(id)
+    }
+    return filtered
+}
+
+FilterAppConfigCycleWindows(list, app_config := "") {
+    if !(app_config is Map)
+        return list
+
+    filtered := []
+    for _, id in list {
+        if AppConfigMatchesWindow(app_config, id)
+            filtered.Push(id)
     }
     return filtered
 }
@@ -246,31 +274,35 @@ ApplyCurrentDesktopOrder(exe, win_list, active_hwnd, current_only := false) {
     for _, id in current_order
         current_set[id] := true
 
+    ; Current-desktop ordering uses visible windows to avoid skipping local tiles.
     if (current_order.Length = 0) {
         if (current_only && active_hwnd && WindowExistsAcrossDesktops(active_hwnd))
             return [active_hwnd]
         return win_list
     }
 
-    if current_only
-        return current_order
+    if current_only {
+        ; Keep stable ordering to avoid z-order oscillation while cycling.
+        ordered := []
+        for _, id in win_list {
+            if current_set.Has(id)
+                ordered.Push(id)
+        }
+        return ordered
+    }
 
     if !Config["virtual_desktop"]["cycle_prefer_current"]
         return win_list
 
+    ; Preserve win_list order while preferring current desktop windows first.
     ordered := []
-    for _, id in current_order
-        ordered.Push(id)
-
-    seen := Map()
-    for _, id in current_order
-        seen[id] := true
-
     for _, id in win_list {
-        if seen.Has(id)
-            continue
-        ordered.Push(id)
-        seen[id] := true
+        if current_set.Has(id)
+            ordered.Push(id)
+    }
+    for _, id in win_list {
+        if !current_set.Has(id)
+            ordered.Push(id)
     }
     return ordered
 }
@@ -454,6 +486,7 @@ BuildCycleWindowList(exe, win_list) {
     if !VirtualDesktopEnabled()
         return win_list
 
+    ; Cache app windows seen across desktops since WinGetList can hide off-desktop windows.
     cache := UpdateAppCycleCache(exe, win_list)
     if (cache.Count = 0)
         return win_list
@@ -483,7 +516,8 @@ HandleSuperTap() {
     }
 
     if (A_TickCount - last_super_tap <= super_double_tap_ms) {
-        Window.SetMoveMode(true)
+        ; Use native overview instead of move mode (heuristic detects Task View state).
+        Send("#{Tab}")
         UpdateCommandToastVisibility()
         last_super_tap := 0
         return
@@ -493,9 +527,7 @@ HandleSuperTap() {
 }
 
 OnSuperKeyUp() {
-    global move_mode_enabled
-    if move_mode_enabled
-        HandleSuperTap()
+    HandleSuperTap()
     if ReloadModeActive() {
         global reload_mode_activated_at
         if (A_TickCount - reload_mode_activated_at < 500) {
@@ -507,9 +539,7 @@ OnSuperKeyUp() {
     UpdateCommandToastVisibility()
 }
 
-if (move_mode_enabled || Config["reload"]["mode_enabled"] || Config["helper"]["enabled"]) {
-    RegisterSuperKeyHotkey("", " up", (*) => OnSuperKeyUp())
-}
+RegisterSuperKeyHotkey("", " up", (*) => OnSuperKeyUp())
 
 Hotkey("~LButton", (*) => BeginSuperDrag())
 
@@ -612,9 +642,21 @@ CycleAppWindows(*) {
     if !exe
         return
 
-    win_list := GetWindowsAcrossDesktops("ahk_exe " exe)
+    app_config := FindAppConfigByWindow(hwnd)
+    if (app_config is Map && AppConfigExcludesTitle(app_config, hwnd))
+        return
+
+    win_list := []
+    if (app_config is Map) {
+        win_title := app_config.Has("win_title") ? app_config["win_title"] : ""
+        win_list := GetAppWindowList(win_title, app_config)
+    } else {
+        win_list := GetWindowsAcrossDesktops("ahk_exe " exe)
+    }
     win_list := FilterWindowList(exe, win_list)
     win_list := BuildCycleWindowList(exe, win_list)
+    win_list := FilterAppConfigCycleWindows(win_list, app_config)
+    win_list := FilterExcludedCycleWindows(win_list, app_config)
     if (win_list.Length < 2)
         return
 
@@ -666,9 +708,21 @@ CycleAppWindowsCurrent(*) {
     if !exe
         return
 
-    win_list := GetWindowsAcrossDesktops("ahk_exe " exe)
+    app_config := FindAppConfigByWindow(hwnd)
+    if (app_config is Map && AppConfigExcludesTitle(app_config, hwnd))
+        return
+
+    win_list := []
+    if (app_config is Map) {
+        win_title := app_config.Has("win_title") ? app_config["win_title"] : ""
+        win_list := GetAppWindowList(win_title, app_config)
+    } else {
+        win_list := GetWindowsAcrossDesktops("ahk_exe " exe)
+    }
     win_list := FilterWindowList(exe, win_list)
     win_list := BuildCycleWindowList(exe, win_list)
+    win_list := FilterAppConfigCycleWindows(win_list, app_config)
+    win_list := FilterExcludedCycleWindows(win_list, app_config)
     if (win_list.Length < 2)
         return
 
@@ -744,8 +798,13 @@ GoToRelativeDesktop(delta) {
     target := VD.modulusResolveDesktopNum(current + delta)
     LogVirtualDesktopAction("goto_relative current=" current " delta=" delta " target=" target)
     RefreshVirtualDesktopState()
-    VD.goToDesktopNum(target)
-    VD.WaitDesktopSwitched(target)
+    curtain_visible := BeginDesktopSwitchCurtain()
+    try {
+        VD.goToDesktopNum(target)
+        VD.WaitDesktopSwitched(target)
+    } finally {
+        EndDesktopSwitchCurtain(curtain_visible)
+    }
     RefreshVirtualDesktopState()
 }
 
@@ -757,8 +816,13 @@ GoToDesktopNumber(desktop_num) {
     LogVirtualDesktopAction("goto_absolute target=" desktop_num " current=" GetCurrentDesktopNumFresh())
     RefreshVirtualDesktopState()
     GetCurrentDesktopNumFresh()
-    VD.goToDesktopNum(desktop_num)
-    VD.WaitDesktopSwitched(desktop_num)
+    curtain_visible := BeginDesktopSwitchCurtain()
+    try {
+        VD.goToDesktopNum(desktop_num)
+        VD.WaitDesktopSwitched(desktop_num)
+    } finally {
+        EndDesktopSwitchCurtain(curtain_visible)
+    }
     RefreshVirtualDesktopState()
 }
 
@@ -774,8 +838,13 @@ MoveWindowToRelativeDesktop(delta) {
     target := VD.modulusResolveDesktopNum(current + delta)
     LogVirtualDesktopAction("move_relative current=" current " delta=" delta " target=" target)
     RefreshVirtualDesktopState()
-    VD.MoveWindowToDesktopNum("A", target, true)
-    VD.WaitDesktopSwitched(target)
+    curtain_visible := BeginDesktopSwitchCurtain()
+    try {
+        VD.MoveWindowToDesktopNum("A", target, true)
+        VD.WaitDesktopSwitched(target)
+    } finally {
+        EndDesktopSwitchCurtain(curtain_visible)
+    }
     RefreshVirtualDesktopState()
 }
 
@@ -787,8 +856,13 @@ MoveWindowToDesktopNumber(desktop_num) {
     LogVirtualDesktopAction("move_absolute target=" desktop_num " current=" GetCurrentDesktopNumFresh())
     RefreshVirtualDesktopState()
     GetCurrentDesktopNumFresh()
-    VD.MoveWindowToDesktopNum("A", desktop_num, true)
-    VD.WaitDesktopSwitched(desktop_num)
+    curtain_visible := BeginDesktopSwitchCurtain()
+    try {
+        VD.MoveWindowToDesktopNum("A", desktop_num, true)
+        VD.WaitDesktopSwitched(desktop_num)
+    } finally {
+        EndDesktopSwitchCurtain(curtain_visible)
+    }
     RefreshVirtualDesktopState()
 }
 
@@ -808,7 +882,6 @@ Hotkey("^j", (*) => MoveActiveWindow(0, move_step))
 Hotkey("^k", (*) => MoveActiveWindow(0, -move_step))
 HotIf IsSuperKeyPressed
 Hotkey("m", ToggleMaximize)
-Hotkey("q", CloseWindow)
 Hotkey(cycle_app_windows_hotkey, CycleAppWindows)
 if (cycle_app_windows_current_hotkey != "")
     Hotkey(cycle_app_windows_current_hotkey, CycleAppWindowsCurrent)
@@ -816,6 +889,8 @@ RegisterSuperComboHotkey("/", (*) => ShowCommandToastTemporary())
 if (minimize_others_hotkey != "")
     Hotkey(minimize_others_hotkey, MinimizeOtherWindows)
 HotIf
+
+Hotkey("!q", CloseWindow)
 
 HotIf (*) => IsSuperKeyPressed() && IsAltPressed() && !GetKeyState("Shift", "P")
 if (vd_prev_hotkey != "")
@@ -864,6 +939,20 @@ if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
 }
 HotIf
 
+HotIf (*) => IsSuperKeyPressed() && !GetKeyState("Shift", "P")
+if (vd_scroll_switch) {
+    ; Use super+wheel for desktop switching to match the native overview flow.
+    Hotkey("*WheelUp", (*) => (
+        LogVirtualDesktopAction("goto_relative hotkey=*WheelUp delta=-1 current=" GetCurrentDesktopNumFresh()),
+        GoToRelativeDesktop(-1)
+    ))
+    Hotkey("*WheelDown", (*) => (
+        LogVirtualDesktopAction("goto_relative hotkey=*WheelDown delta=1 current=" GetCurrentDesktopNumFresh()),
+        GoToRelativeDesktop(1)
+    ))
+}
+HotIf
+
 HotIf (*) => IsSuperKeyPressed() && IsAltPressed() && GetKeyState("Shift", "P")
 if (vd_move_prev_hotkey != "")
     Hotkey(vd_move_prev_hotkey, (*) => (
@@ -875,6 +964,16 @@ if (vd_move_next_hotkey != "")
         LogVirtualDesktopAction("move_relative hotkey=" vd_move_next_hotkey " delta=1 current=" GetCurrentDesktopNumFresh()),
         MoveWindowToRelativeDesktop(1)
     ))
+if (vd_scroll_switch) {
+    Hotkey("*WheelUp", (*) => (
+        LogVirtualDesktopAction("move_relative hotkey=*WheelUp delta=-1 current=" GetCurrentDesktopNumFresh()),
+        MoveWindowToRelativeDesktop(-1)
+    ))
+    Hotkey("*WheelDown", (*) => (
+        LogVirtualDesktopAction("move_relative hotkey=*WheelDown delta=1 current=" GetCurrentDesktopNumFresh()),
+        MoveWindowToRelativeDesktop(1)
+    ))
+}
 LogVirtualDesktopHotkeys("move_prev_hotkey=" vd_move_prev_hotkey " move_next_hotkey=" vd_move_next_hotkey)
 for _, entry in vd_move_hotkeys {
     if !(entry is Map)
@@ -923,9 +1022,51 @@ if move_mode_enabled {
     HotIf
 }
 
+HotIf IsOverviewActive
+Hotkey("h", (*) => Send("{Left}"))
+Hotkey("l", (*) => Send("{Right}"))
+Hotkey("j", (*) => Send("{Down}"))
+Hotkey("k", (*) => Send("{Up}"))
+HotIf
+
+EnterMoveMode(*) {
+    global move_mode_enabled
+    if !move_mode_enabled
+        return
+    Window.SetMoveMode(true)
+    UpdateCommandToastVisibility()
+}
+
 ExitMoveMode() {
     Window.SetMoveMode(false)
     UpdateCommandToastVisibility()
+}
+
+IsOverviewActive(*) {
+    ; Heuristic: Task View classes vary by Windows build, so allow a broader list.
+    static overview_classes := ["MultitaskingViewFrame", "TaskViewFrame", "XamlExplorerHostIslandWindow"]
+    static allowed_processes := Map("explorer.exe", true, "ShellExperienceHost.exe", true)
+
+    for _, class_name in overview_classes {
+        hwnds := WinGetList("ahk_class " class_name)
+        for _, hwnd in hwnds {
+            if !hwnd
+                continue
+            process_name := ""
+            try process_name := WinGetProcessName("ahk_id " hwnd)
+            process_lower := StrLower(process_name)
+            if (process_lower = "" || !allowed_processes.Has(process_lower))
+                continue
+            if (class_name = "XamlExplorerHostIslandWindow") {
+                title := ""
+                try title := WinGetTitle("ahk_id " hwnd)
+                if (title != "" && !InStr(title, "Task View") && !InStr(title, "Multitasking"))
+                    continue
+            }
+            return true
+        }
+    }
+    return false
 }
 
 BeginSuperDrag(*) {

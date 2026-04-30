@@ -1,10 +1,15 @@
 ; Helper: focus existing window, otherwise run app.
+; Launch-or-focus helpers + per-app matching.
 ; If the target window is already active, toggle back to the previous window
 ; recorded for this hotkey.
 FocusOrRun(winTitle, exePath, hotkey_id, app_config := "", *) {
     static last_window := Map()
     target_hwnd := 0
+    BeginMatchRun()
     hwnds := GetAppWindowList(winTitle, app_config)
+    EndMatchRun()
+    if VirtualDesktopFocusDebugEnabled()
+        LogFocusOrRunCandidates(hotkey_id, app_config, hwnds)
     current_hwnd := 0
     try current_hwnd := WinGetID("A")
     catch
@@ -13,10 +18,12 @@ FocusOrRun(winTitle, exePath, hotkey_id, app_config := "", *) {
     if (hwnds.Length) {
         target_hwnd := PickFocusableAppWindow(hwnds, winTitle)
         if (!target_hwnd)
-            target_hwnd := hwnds[1]
+            target_hwnd := PickDesktopAssignedWindow(hwnds)
     }
 
     if target_hwnd {
+        if VirtualDesktopFocusDebugEnabled()
+            LogFocusOrRunSelection(hotkey_id, app_config, target_hwnd)
         if (current_hwnd = target_hwnd) {
             if last_window.Has(hotkey_id) && WindowExistsAcrossDesktops(last_window[hotkey_id]) {
                 ActivateWindowAcrossDesktops(last_window[hotkey_id])
@@ -28,6 +35,8 @@ FocusOrRun(winTitle, exePath, hotkey_id, app_config := "", *) {
         }
         ActivateWindowAcrossDesktops(target_hwnd)
     } else {
+        if VirtualDesktopFocusDebugEnabled()
+            LogFocusOrRunMiss(hotkey_id, app_config)
         RunResolved(exePath, app_config)
         ScheduleMoveAppWindowToDesktop(winTitle, app_config)
     }
@@ -35,28 +44,450 @@ FocusOrRun(winTitle, exePath, hotkey_id, app_config := "", *) {
 
 GetAppWindowList(win_title, app_config := "") {
     if (app_config is Map && app_config.Has("match") && app_config["match"] is Map) {
-        return GetWindowsByMatch(app_config["match"])
+        return GetWindowsByMatch(app_config["match"], app_config)
     }
     if !win_title
         return []
-    return GetWindowsAcrossDesktops(win_title)
+    win_list := GetWindowsAcrossDesktops(win_title)
+    if RegExMatch(win_title, "i)^ahk_exe\s+") {
+        exe_name := RegExReplace(win_title, "i)^ahk_exe\s+", "")
+        win_list := MergeWindowLists(win_list, CollectWindowsByExeFallback(exe_name, win_list))
+    }
+    win_list := FilterDesktopAssignedWindows(win_list, true)
+    UpdateWindowMatchCacheFromList(win_list)
+    return FilterExcludedWindows(win_list, app_config)
 }
 
-GetWindowsByMatch(match) {
+GetWindowsByMatch(match, app_config := "") {
     matches := []
-    for _, hwnd in GetWindowsAcrossDesktops() {
-        if MatchWindowFields(match, hwnd)
+    match_true := 0
+    exclude_true := 0
+    debug_results := []
+    win_list := GetWindowsByMatchCandidates(match)
+    win_list := FilterDesktopAssignedWindows(win_list, true)
+    UpdateWindowMatchCacheFromList(win_list)
+    bak_detect_hidden_windows := A_DetectHiddenWindows
+    A_DetectHiddenWindows := true
+    for _, hwnd in win_list {
+        matched := MatchWindowFields(match, hwnd)
+        if matched
+            match_true += 1
+        excluded := AppConfigExcludesTitle(app_config, hwnd)
+        if excluded
+            exclude_true += 1
+        if VirtualDesktopFocusDebugEnabled() {
+            debug_results.Push(Map(
+                "hwnd", hwnd,
+                "matched", matched,
+                "excluded", excluded
+            ))
+        }
+        if matched && !excluded
             matches.Push(hwnd)
+    }
+    A_DetectHiddenWindows := bak_detect_hidden_windows
+    if VirtualDesktopFocusDebugEnabled() && matches.Length = 0 {
+        LogMatchDiagnostics(match, win_list, app_config, debug_results)
+        LogMatchCounts(match_true, exclude_true, win_list)
     }
     return matches
 }
 
+GetWindowsByMatchCandidates(match) {
+    if !(match is Map)
+        return GetWindowsAcrossDesktops()
+    if match.Has("exe") && match["exe"] != "" && !(match.Has("exe_regex") && match["exe_regex"]) {
+        exe_name := match["exe"]
+        if RegExMatch(exe_name, "i)^ahk_exe\s+")
+            exe_name := RegExReplace(exe_name, "i)^ahk_exe\s+", "")
+        win_list := GetWindowsAcrossDesktops("ahk_exe " exe_name)
+        return MergeWindowLists(win_list, CollectWindowsByExeFallback(exe_name, win_list))
+    }
+    return GetWindowsAcrossDesktops()
+}
+
+MergeWindowLists(primary, fallback) {
+    if !(fallback is Array)
+        return primary
+    if !(primary is Array)
+        primary := []
+    if (fallback.Length = 0)
+        return primary
+    dedup := Map()
+    merged := []
+    for _, hwnd in primary {
+        dedup[hwnd] := true
+        merged.Push(hwnd)
+    }
+    for _, hwnd in fallback {
+        if !dedup.Has(hwnd) {
+            merged.Push(hwnd)
+            dedup[hwnd] := true
+        }
+    }
+    return merged
+}
+
+FilterDesktopAssignedWindows(hwnds, allow_fallback := false) {
+    if !VirtualDesktopEnabled()
+        return hwnds
+    filtered := []
+    for _, hwnd in hwnds {
+        desktop_num := GetWindowDesktopNum(hwnd)
+        if (desktop_num <= 0)
+            continue
+        filtered.Push(hwnd)
+    }
+    if (allow_fallback && filtered.Length = 0)
+        return hwnds
+    return filtered
+}
+
+CollectWindowsByExeFallback(exe_name, win_list) {
+    merged := []
+    cached := GetCachedWindowsByExe(exe_name)
+    merged := MergeWindowLists(merged, cached)
+    expanded := []
+    if ShouldExpandExeSearch(win_list)
+        expanded := CollectWindowsByExe(exe_name)
+    merged := MergeWindowLists(merged, expanded)
+    if VirtualDesktopFocusDebugEnabled()
+        LogFocusOrRunExeFallback(exe_name, win_list, cached, expanded, merged)
+    return merged
+}
+
+ShouldExpandExeSearch(win_list) {
+    if !VirtualDesktopEnabled()
+        return false
+    if !(win_list is Array) || win_list.Length = 0
+        return true
+    has_valid := false
+    has_invalid := false
+    for _, hwnd in win_list {
+        desktop_num := GetWindowDesktopNum(hwnd)
+        if (desktop_num > 0)
+            has_valid := true
+        else
+            has_invalid := true
+    }
+    if VirtualDesktopFocusDebugEnabled()
+        LogExeExpandDecision(win_list.Length, has_valid, has_invalid)
+    return !has_valid
+}
+
+CollectWindowsByExe(exe_name) {
+    if (exe_name = "")
+        return []
+    filtered := []
+    ; WinGetList may miss off-desktop windows for some apps.
+    win_list := GetAllTopLevelWindows()
+    pid_set := BuildProcessPidSet(exe_name)
+    total_windows := win_list.Length
+    pid_zero := 0
+    pid_match := 0
+    pid_miss := 0
+    bak_detect_hidden_windows := A_DetectHiddenWindows
+    A_DetectHiddenWindows := true
+    for _, hwnd in win_list {
+        if !WindowExistsAcrossDesktops(hwnd)
+            continue
+        pid := GetWindowPid(hwnd)
+        if (pid = 0) {
+            pid_zero += 1
+            continue
+        }
+        if !pid_set.Has(pid) {
+            pid_miss += 1
+            continue
+        }
+        pid_match += 1
+        if VirtualDesktopEnabled() {
+            desktop_num := GetWindowDesktopNum(hwnd)
+            if (desktop_num <= 0)
+                continue
+        }
+        filtered.Push(hwnd)
+    }
+    A_DetectHiddenWindows := bak_detect_hidden_windows
+    if VirtualDesktopFocusDebugEnabled() {
+        LogFocusOrRunEnumStats(exe_name, total_windows, pid_set.Count, pid_match, pid_miss, pid_zero)
+        if (pid_set.Count = 0)
+            LogFocusOrRunSnapshotStats(exe_name)
+    }
+    return filtered
+}
+
+BuildProcessPidSet(exe_name) {
+    pid_set := Map()
+    if (exe_name = "")
+        return pid_set
+    snapshot := GetProcessSnapshot()
+    exe_map := snapshot["exe_map"]
+    target := StrLower(exe_name)
+    for pid, name in exe_map {
+        if (StrLower(name) = target)
+            pid_set[pid] := true
+    }
+    return pid_set
+}
+
+LogFocusOrRunEnumStats(exe_name, total_windows, pid_set_count, pid_match, pid_miss, pid_zero) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    line := "[" A_Now "] enum_stats exe=" exe_name
+    line .= " windows=" total_windows
+    line .= " pid_set=" pid_set_count
+    line .= " pid_match=" pid_match
+    line .= " pid_miss=" pid_miss
+    line .= " pid_zero=" pid_zero
+    SafeFileAppend(line "`n", log_path)
+}
+
+LogFocusOrRunSnapshotStats(exe_name) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    snapshot := GetProcessSnapshot()
+    exe_map := snapshot["exe_map"]
+    exact := 0
+    contains_count := 0
+    total := 0
+    target := StrLower(exe_name)
+    needle := StrLower(RegExReplace(exe_name, "\.exe$", ""))
+    for _, name in exe_map {
+        total += 1
+        lower := StrLower(name)
+        if (lower = target)
+            exact += 1
+        if (InStr(lower, needle))
+            contains_count += 1
+    }
+    line := "[" A_Now "] snapshot_stats exe=" exe_name
+    line .= " total=" total
+    line .= " exact=" exact
+    line .= " contains=" contains_count
+    SafeFileAppend(line "`n", log_path)
+}
+
+GetAllTopLevelWindows() {
+    hwnds := []
+    global enum_windows_target := hwnds
+    callback := CallbackCreate(EnumWindowsCallback, "Fast")
+    DllCall("EnumWindows", "Ptr", callback, "Ptr", 0)
+    CallbackFree(callback)
+    enum_windows_target := ""
+    return hwnds
+}
+
+EnumWindowsCallback(hwnd, lparam) {
+    global enum_windows_target
+    if (enum_windows_target is Array)
+        enum_windows_target.Push(hwnd)
+    return true
+}
+
+GetWindowPid(hwnd) {
+    pid := 0
+    DllCall("GetWindowThreadProcessId", "Ptr", hwnd, "UInt*", &pid)
+    return pid
+}
+
+LogFocusOrRunCandidates(hotkey_id, app_config, hwnds) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    app_id := (app_config is Map && app_config.Has("id")) ? app_config["id"] : ""
+    lines := []
+    lines.Push("[" A_Now "] focus_candidates hotkey=" hotkey_id " app=" app_id " count=" (hwnds is Array ? hwnds.Length : 0))
+    bak_detect_hidden_windows := A_DetectHiddenWindows
+    A_DetectHiddenWindows := true
+    if (hwnds is Array) {
+        for _, hwnd in hwnds {
+            desktop_num := VirtualDesktopEnabled() ? GetWindowDesktopNum(hwnd) : 0
+            exe_name := ""
+            class_name := ""
+            title := ""
+            exe_name := ""
+            try exe_name := WinGetProcessName("ahk_id " hwnd)
+            if (exe_name = "") {
+                pid := GetWindowPid(hwnd)
+                exe_name := GetProcessNameFromPid(pid)
+                if (exe_name = "")
+                    exe_name := GetProcessNameFromSnapshot(pid)
+            }
+            try class_name := WinGetClass("ahk_id " hwnd)
+            try title := WinGetTitle("ahk_id " hwnd)
+            lines.Push("  hwnd=" Format("0x{:X}", hwnd) " desktop=" desktop_num " exe=" exe_name " class=" class_name " title=" title)
+        }
+    }
+    A_DetectHiddenWindows := bak_detect_hidden_windows
+    SafeFileAppend(StrJoin(lines, "`n") "`n", log_path)
+}
+
+LogFocusOrRunSelection(hotkey_id, app_config, hwnd) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    app_id := (app_config is Map && app_config.Has("id")) ? app_config["id"] : ""
+    desktop_num := VirtualDesktopEnabled() ? GetWindowDesktopNum(hwnd) : 0
+    exe_name := ""
+    class_name := ""
+    title := ""
+    try exe_name := WinGetProcessName("ahk_id " hwnd)
+    try class_name := WinGetClass("ahk_id " hwnd)
+    try title := WinGetTitle("ahk_id " hwnd)
+    line := "[" A_Now "] focus_select hotkey=" hotkey_id " app=" app_id
+    line .= " hwnd=" Format("0x{:X}", hwnd) " desktop=" desktop_num " exe=" exe_name " class=" class_name " title=" title
+    SafeFileAppend(line "`n", log_path)
+}
+
+LogFocusOrRunMiss(hotkey_id, app_config) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    app_id := (app_config is Map && app_config.Has("id")) ? app_config["id"] : ""
+    SafeFileAppend("[" A_Now "] focus_miss hotkey=" hotkey_id " app=" app_id "`n", log_path)
+}
+
+LogFocusOrRunExeFallback(exe_name, win_list, cached, expanded, merged) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    line := "[" A_Now "] exe_fallback exe=" exe_name
+    line .= " winget=" (win_list is Array ? win_list.Length : 0)
+    line .= " cached=" (cached is Array ? cached.Length : 0)
+    line .= " enum=" (expanded is Array ? expanded.Length : 0)
+    line .= " merged=" (merged is Array ? merged.Length : 0)
+    SafeFileAppend(line "`n", log_path)
+}
+
+LogMatchDiagnostics(match, win_list, app_config := "", debug_results := "") {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    exe_pattern := match.Has("exe") ? match["exe"] : ""
+    class_pattern := match.Has("class") ? match["class"] : ""
+    title_pattern := match.Has("title") ? match["title"] : ""
+    exe_regex := match.Has("exe_regex") && match["exe_regex"]
+    class_regex := match.Has("class_regex") && match["class_regex"]
+    title_regex := match.Has("title_regex") && match["title_regex"]
+
+    lines := []
+    lines.Push("[" A_Now "] match_diag exe=" exe_pattern " class=" class_pattern " title=" title_pattern)
+    lines.Push("  regex exe=" exe_regex " class=" class_regex " title=" title_regex " candidates=" (win_list is Array ? win_list.Length : 0))
+    process_tree := match.Has("process_tree") && (match["process_tree"] is Map) ? match["process_tree"] : ""
+
+    bak_detect_hidden_windows := A_DetectHiddenWindows
+    A_DetectHiddenWindows := true
+    sample_max := 12
+    if (win_list is Array) {
+        debug_index := 1
+        for _, hwnd in win_list {
+            if (sample_max <= 0)
+                break
+            sample_max -= 1
+            exists := WindowExistsAcrossDesktops(hwnd)
+            desktop_num := VirtualDesktopEnabled() ? GetWindowDesktopNum(hwnd) : 0
+            pid := GetWindowPid(hwnd)
+            exe_name := ""
+            class_name := ""
+            title := ""
+            try exe_name := WinGetProcessName("ahk_id " hwnd)
+            if (exe_name = "" && pid)
+                exe_name := GetProcessNameFromPid(pid)
+            if (exe_name = "" && pid)
+                exe_name := GetProcessNameFromSnapshot(pid)
+            try class_name := WinGetClass("ahk_id " hwnd)
+            try title := WinGetTitle("ahk_id " hwnd)
+
+            exe_ok := MatchFieldValue(exe_pattern, exe_name, exe_regex)
+            class_ok := MatchFieldValue(class_pattern, class_name, class_regex)
+            title_ok := MatchFieldValue(title_pattern, title, title_regex)
+            tree_ok := ""
+            tree_matched := ""
+            if (process_tree is Map) {
+                detail := GetProcessTreeMatchDetail(process_tree, hwnd)
+                if detail["enabled"] {
+                    tree_ok := detail["final"]
+                    tree_matched := detail["matched"]
+                }
+            }
+            match_ok := MatchWindowFields(match, hwnd)
+            exclude_ok := ""
+            if (app_config is Map)
+                exclude_ok := AppConfigExcludesTitle(app_config, hwnd)
+            lines.Push("  hwnd=" Format("0x{:X}", hwnd) " desktop=" desktop_num " pid=" pid)
+            lines.Push("    exists=" exists " match_ok=" match_ok " exclude=" exclude_ok)
+            lines.Push("    exe=" exe_name " match=" exe_ok)
+            lines.Push("    class=" class_name " match=" class_ok)
+            lines.Push("    title=" title " match=" title_ok)
+            if (tree_ok != "")
+                lines.Push("    process_tree matched=" tree_matched " final=" tree_ok)
+            if (debug_results is Array && debug_index <= debug_results.Length) {
+                entry := debug_results[debug_index]
+                debug_index += 1
+                loop_match := entry.Has("matched") ? entry["matched"] : ""
+                loop_exclude := entry.Has("excluded") ? entry["excluded"] : ""
+                lines.Push("    loop matched=" loop_match " excluded=" loop_exclude)
+            }
+        }
+    }
+    A_DetectHiddenWindows := bak_detect_hidden_windows
+    SafeFileAppend(StrJoin(lines, "`n") "`n", log_path)
+}
+
+LogMatchCounts(match_true, exclude_true, win_list) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    total := (win_list is Array ? win_list.Length : 0)
+    line := "[" A_Now "] match_counts total=" total " matched=" match_true " excluded=" exclude_true
+    SafeFileAppend(line "`n", log_path)
+}
+
+MatchFieldValue(pattern, value, use_regex) {
+    if (pattern = "")
+        return true
+    if use_regex {
+        if !RegExMatch(pattern, "^\(\?i\)")
+            pattern := "(?i)" pattern
+        return RegExMatch(value, pattern) != 0
+    }
+    return StrLower(value) = StrLower(pattern)
+}
+
+LogExeExpandDecision(count, has_valid, has_invalid) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+    line := "[" A_Now "] exe_expand candidates=" count " has_valid=" has_valid " has_invalid=" has_invalid
+    SafeFileAppend(line "`n", log_path)
+}
+
+FilterExcludedWindows(hwnds, app_config := "") {
+    if !(app_config is Map)
+        return hwnds
+    if !app_config.Has("exclude_titles") || !(app_config["exclude_titles"] is Array)
+        return hwnds
+
+    filtered := []
+    for _, hwnd in hwnds {
+        if !AppConfigExcludesTitle(app_config, hwnd)
+            filtered.Push(hwnd)
+    }
+
+    return filtered
+}
+
 PickFocusableAppWindow(hwnds, win_title) {
     for hwnd in hwnds {
-        if !WinExist("ahk_id " hwnd)
+        if !WindowExistsAcrossDesktops(hwnd)
             continue
         if (InStr(win_title, "explorer.exe")) {
-            class_name := WinGetClass("ahk_id " hwnd)
+            try class_name := WinGetClass("ahk_id " hwnd)
+            catch
+                continue
             if (class_name = "Progman" || class_name = "WorkerW" || class_name = "Shell_TrayWnd")
                 continue
         }
@@ -72,25 +503,48 @@ PickFocusableAppWindow(hwnds, win_title) {
         if VirtualDesktopEnabled() {
             desktop_num := GetWindowDesktopNum(hwnd)
             if (desktop_num <= 0)
-                allow_invisible := true
-            else if (desktop_num != VD.getCurrentDesktopNum())
+                continue
+            if (desktop_num > 0 && desktop_num != VD.getCurrentDesktopNum())
                 allow_invisible := true
         }
         if (!allow_invisible && !(style & 0x10000000))
             continue
 
-        state := WinGetMinMax("ahk_id " hwnd)
+        try state := WinGetMinMax("ahk_id " hwnd)
+        catch
+            continue
         if (state = -1)
             continue
         return hwnd
     }
 
     for hwnd in hwnds {
-        if !WinExist("ahk_id " hwnd)
+        if !WindowExistsAcrossDesktops(hwnd)
             continue
-        state := WinGetMinMax("ahk_id " hwnd)
+        try state := WinGetMinMax("ahk_id " hwnd)
+        catch
+            continue
         if (state = -1)
             return hwnd
+        if VirtualDesktopEnabled() {
+            desktop_num := GetWindowDesktopNum(hwnd)
+            if (desktop_num <= 0)
+                continue
+        }
+    }
+    return 0
+}
+
+PickDesktopAssignedWindow(hwnds) {
+    for hwnd in hwnds {
+        if !WindowExistsAcrossDesktops(hwnd)
+            continue
+        if VirtualDesktopEnabled() {
+            desktop_num := GetWindowDesktopNum(hwnd)
+            if (desktop_num <= 0)
+                continue
+        }
+        return hwnd
     }
     return 0
 }
@@ -133,8 +587,13 @@ TryMoveAppWindowToDesktop(win_title, app_config, target_desktop, follow_on_spawn
     if (hwnd) {
         VD.MoveWindowToDesktopNum("ahk_id " hwnd, target_desktop, follow_on_spawn)
         if follow_on_spawn {
-            VD.goToDesktopNum(target_desktop)
-            VD.WaitDesktopSwitched(target_desktop)
+            curtain_visible := BeginDesktopSwitchCurtain()
+            try {
+                VD.goToDesktopNum(target_desktop)
+                VD.WaitDesktopSwitched(target_desktop)
+            } finally {
+                EndDesktopSwitchCurtain(curtain_visible)
+            }
         }
         try {
             assigned_desktop := GetWindowDesktopNum(hwnd)

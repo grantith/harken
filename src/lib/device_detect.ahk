@@ -1,3 +1,4 @@
+; Device detection helpers (keyboard presence).
 IsKeyboardPresent(vidPid)
 {
     try {

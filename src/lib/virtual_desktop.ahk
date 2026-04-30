@@ -1,5 +1,6 @@
 #Include %A_LineFile%\..\VD.ahk
 
+; Virtual desktop integration (tray indicator, auto-assign, helpers).
 VirtualDesktopEnabled() {
     global Config
     if !IsSet(Config)
@@ -8,6 +9,120 @@ VirtualDesktopEnabled() {
         return false
     return Config["virtual_desktop"]["enabled"]
 }
+
+SwitchCurtainEnabled() {
+    global Config
+    if !VirtualDesktopEnabled()
+        return false
+    if !Config["virtual_desktop"].Has("switch_curtain")
+        return false
+    curtain := Config["virtual_desktop"]["switch_curtain"]
+    if !(curtain is Map)
+        return false
+    if !curtain.Has("enabled")
+        return false
+    return curtain["enabled"]
+}
+
+SwitchCurtainOpacity() {
+    global Config
+    opacity := 204
+    if Config["virtual_desktop"].Has("switch_curtain") {
+        curtain := Config["virtual_desktop"]["switch_curtain"]
+        if (curtain is Map && curtain.Has("opacity"))
+            opacity := curtain["opacity"]
+    }
+    if !(opacity is Number)
+        opacity := 204
+    return Max(0, Min(255, Round(opacity)))
+}
+
+SwitchCurtainColor() {
+    global Config
+    color := "#202020"
+    if Config["virtual_desktop"].Has("switch_curtain") {
+        curtain := Config["virtual_desktop"]["switch_curtain"]
+        if (curtain is Map && curtain.Has("color"))
+            color := curtain["color"]
+    }
+    return NormalizeHexColor(color, "202020")
+}
+
+NormalizeHexColor(value, fallback) {
+    if !(value is String)
+        return fallback
+    trimmed := Trim(value)
+    if (SubStr(trimmed, 1, 1) = "#")
+        trimmed := SubStr(trimmed, 2)
+    if (StrLen(trimmed) = 8 && RegExMatch(trimmed, "i)^0x[0-9a-f]{6}$"))
+        return SubStr(trimmed, 3)
+    if (StrLen(trimmed) = 6 && RegExMatch(trimmed, "i)^[0-9a-f]{6}$"))
+        return trimmed
+    return fallback
+}
+
+GetVirtualScreenBounds(&left, &top, &width, &height) {
+    try {
+        left := SysGet(76)
+        top := SysGet(77)
+        width := SysGet(78)
+        height := SysGet(79)
+    } catch {
+        left := 0
+        top := 0
+        width := A_ScreenWidth
+        height := A_ScreenHeight
+    }
+    if (width <= 0 || height <= 0) {
+        left := 0
+        top := 0
+        width := A_ScreenWidth
+        height := A_ScreenHeight
+    }
+}
+
+global switch_curtain_gui := ""
+global switch_curtain_visible := false
+
+ShowSwitchCurtain() {
+    global switch_curtain_gui, switch_curtain_visible
+    if !SwitchCurtainEnabled()
+        return false
+    if !switch_curtain_gui {
+        switch_curtain_gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20", "harken Desktop Switch")
+        switch_curtain_gui.MarginX := 0
+        switch_curtain_gui.MarginY := 0
+        switch_curtain_gui.BackColor := SwitchCurtainColor()
+    }
+    GetVirtualScreenBounds(&left, &top, &width, &height)
+    switch_curtain_gui.BackColor := SwitchCurtainColor()
+    switch_curtain_gui.Show("NoActivate x" left " y" top " w" width " h" height)
+    WinSetTransparent(SwitchCurtainOpacity(), switch_curtain_gui)
+    switch_curtain_visible := true
+    return true
+}
+
+HideSwitchCurtain() {
+    global switch_curtain_gui, switch_curtain_visible
+    if !switch_curtain_gui
+        return
+    switch_curtain_gui.Hide()
+    switch_curtain_visible := false
+}
+
+BeginDesktopSwitchCurtain() {
+    if !SwitchCurtainEnabled()
+        return false
+    return ShowSwitchCurtain()
+}
+
+EndDesktopSwitchCurtain(was_shown := false) {
+    if !was_shown
+        return
+    HideSwitchCurtain()
+}
+
+global vd_auto_assign_timer := 0
 
 VirtualDesktopTrayEnabled() {
     global Config
@@ -23,6 +138,35 @@ VirtualDesktopSwitchOnFocus() {
     return Config["virtual_desktop"]["switch_on_focus"]
 }
 
+VirtualDesktopFocusDebugEnabled() {
+    global Config
+    if !VirtualDesktopEnabled()
+        return false
+    return Config["virtual_desktop"].Has("debug_focus") && Config["virtual_desktop"]["debug_focus"]
+}
+
+EnsureFocusDebugLogInit() {
+    global focus_debug_log_initialized
+    if !IsSet(focus_debug_log_initialized)
+        focus_debug_log_initialized := false
+    if focus_debug_log_initialized
+        return
+    if !VirtualDesktopFocusDebugEnabled()
+        return
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    TryResetFocusLogFile(log_dir "\\vd.focus.debug.log")
+    focus_debug_log_initialized := true
+}
+
+TryResetFocusLogFile(path) {
+    try {
+        if FileExist(path)
+            FileDelete(path)
+        FileAppend("", path)
+    }
+}
+
 InitVirtualDesktop() {
     if !VirtualDesktopEnabled()
         return
@@ -30,11 +174,183 @@ InitVirtualDesktop() {
     if (ensure_count > 0)
         VD.createUntil(ensure_count)
     InitVirtualDesktopTrayIndicator()
+    InitVirtualDesktopAutoAssign()
+    EnsureFocusDebugLogInit()
+}
+
+InitVirtualDesktopAutoAssign() {
+    if !VirtualDesktopEnabled()
+        return
+    if !Config["virtual_desktop"].Has("auto_assign") || !Config["virtual_desktop"]["auto_assign"]
+        return
+    ; Polling watcher only handles newly created windows; users can move later.
+    interval := 500
+    if Config["virtual_desktop"].Has("auto_assign_interval_ms")
+        interval := Config["virtual_desktop"]["auto_assign_interval_ms"]
+    StartVirtualDesktopAutoAssign(interval)
+}
+
+StartVirtualDesktopAutoAssign(interval_ms) {
+    global vd_auto_assign_timer
+    if vd_auto_assign_timer
+        SetTimer(vd_auto_assign_timer, 0)
+    vd_auto_assign_timer := VirtualDesktopAutoAssignTick
+    SetTimer(vd_auto_assign_timer, interval_ms)
+}
+
+VirtualDesktopAutoAssignTick(*) {
+    static seen_hwnds := Map()
+    if !VirtualDesktopEnabled()
+        return
+    if !Config.Has("virtual_desktop") || !Config["virtual_desktop"].Has("auto_assign") || !Config["virtual_desktop"]["auto_assign"]
+        return
+
+    bak_detect_hidden_windows := A_DetectHiddenWindows
+    A_DetectHiddenWindows := true
+    win_list := WinGetList()
+    A_DetectHiddenWindows := bak_detect_hidden_windows
+
+    for _, hwnd in win_list {
+        if seen_hwnds.Has(hwnd)
+            continue
+        seen_hwnds[hwnd] := true
+        ; Assign once per window so manual moves are respected afterward.
+        TryAutoAssignWindow(hwnd)
+    }
+
+    for hwnd, _ in seen_hwnds {
+        if !WindowExistsAcrossDesktops(hwnd)
+            seen_hwnds.Delete(hwnd)
+    }
+}
+
+TryAutoAssignWindow(hwnd) {
+    if !WindowExistsAcrossDesktops(hwnd)
+        return
+    try ex_style := WinGetExStyle("ahk_id " hwnd)
+    catch
+        return
+    if (ex_style & 0x80) || (ex_style & 0x08000000)
+        return
+
+    for _, app in Config["apps"] {
+        if !(app is Map)
+            continue
+        if !app.Has("desktop")
+            continue
+        if !AppConfigMatchesWindow(app, hwnd)
+            continue
+        if AppConfigIgnoresWindow(app, hwnd)
+            continue
+        target_desktop := app["desktop"]
+        if (target_desktop <= 0)
+            return
+        total := VD.getCount()
+        if (target_desktop > total) {
+            ; Ensure the destination desktop exists before moving the window.
+            VD.createUntil(target_desktop)
+            VD.IVirtualDesktopListChanged()
+            total := VD.getCount()
+        }
+        if (target_desktop > total)
+            return
+        follow_on_spawn := true
+        if app.Has("follow_on_spawn")
+            follow_on_spawn := app["follow_on_spawn"]
+        VD.MoveWindowToDesktopNum("ahk_id " hwnd, target_desktop, follow_on_spawn)
+        if follow_on_spawn {
+            curtain_visible := BeginDesktopSwitchCurtain()
+            try {
+                VD.goToDesktopNum(target_desktop)
+                VD.WaitDesktopSwitched(target_desktop)
+            } finally {
+                EndDesktopSwitchCurtain(curtain_visible)
+            }
+        }
+        return
+    }
+}
+
+ReapplyDesktopAssignments(*) {
+    if !VirtualDesktopEnabled()
+        return
+    win_list := GetWindowsAcrossDesktops()
+    for _, hwnd in win_list
+        EnforceAppDesktopAssignment(hwnd)
+}
+
+EnforceAppDesktopAssignment(hwnd) {
+    if !WindowExistsAcrossDesktops(hwnd)
+        return false
+    try ex_style := WinGetExStyle("ahk_id " hwnd)
+    catch
+        return false
+    if (ex_style & 0x80) || (ex_style & 0x08000000)
+        return false
+
+    for _, app in Config["apps"] {
+        if !(app is Map)
+            continue
+        if !app.Has("desktop")
+            continue
+        if !AppConfigMatchesWindow(app, hwnd)
+            continue
+        if AppConfigIgnoresWindow(app, hwnd)
+            continue
+        target_desktop := app["desktop"]
+        if (target_desktop <= 0)
+            return false
+
+        assigned_desktop := GetWindowDesktopNum(hwnd)
+        if (assigned_desktop = target_desktop)
+            return true
+
+        total := VD.getCount()
+        if (target_desktop > total) {
+            ; Ensure the destination desktop exists before moving the window.
+            VD.createUntil(target_desktop)
+            VD.IVirtualDesktopListChanged()
+            total := VD.getCount()
+        }
+        if (target_desktop > total)
+            return false
+        VD.MoveWindowToDesktopNum("ahk_id " hwnd, target_desktop, false)
+        return true
+    }
+    return false
+}
+
+AppConfigMatchesWindow(app, hwnd) {
+    if AppConfigExcludesTitle(app, hwnd)
+        return false
+    if app.Has("match") && (app["match"] is Map)
+        return MatchWindowFields(app["match"], hwnd)
+
+    if app.Has("win_title") && app["win_title"] != "" {
+        try return WinExist(app["win_title"] " ahk_id " hwnd)
+    }
+    return false
+}
+
+AppConfigIgnoresWindow(app, hwnd) {
+    if !(app is Map)
+        return false
+    if !app.Has("ignore_classes") || !(app["ignore_classes"] is Array)
+        return false
+    try class_name := WinGetClass("ahk_id " hwnd)
+    catch
+        return false
+    for _, ignore_class in app["ignore_classes"] {
+        if (StrLower(ignore_class) = StrLower(class_name))
+            return true
+    }
+    return false
 }
 
 InitVirtualDesktopTrayIndicator() {
     if !VirtualDesktopTrayEnabled()
         return
+    ; Update via VD notifications to avoid timer polling.
     UpdateVirtualDesktopTrayIndicator()
     VD.ListenersCurrentVirtualDesktopChanged[UpdateVirtualDesktopTrayIndicator] := true
 }
@@ -66,6 +382,7 @@ FormatVirtualDesktopTrayText(current, total) {
 SetTrayIconText(text) {
     if (text = "")
         return
+    ; Draw text onto the existing AHK tray icon (current/total).
     hicon := CreateTextTrayIcon(text)
     if !hicon
         return
@@ -178,9 +495,42 @@ GetCurrentDesktopNumFresh() {
 GetWindowDesktopNum(hwnd) {
     if !VirtualDesktopEnabled()
         return 0
-    try return VD.getDesktopNumOfHWND(hwnd)
+    desktop_num := 0
+    try desktop_num := VD.getDesktopNumOfHWND(hwnd)
     catch as err
+        desktop_num := 0
+    if (desktop_num > 0) {
+        SetWindowDesktopCache(hwnd, desktop_num)
+        return desktop_num
+    }
+    if (desktop_num < 0)
+        return desktop_num
+    cached := GetWindowDesktopCache(hwnd)
+    if (cached > 0)
+        return cached
+    return desktop_num
+}
+
+GetWindowDesktopCache(hwnd) {
+    global window_desktop_cache
+    if !IsSet(window_desktop_cache) || !(window_desktop_cache is Map)
+        window_desktop_cache := Map()
+    if !window_desktop_cache.Has(hwnd)
         return 0
+    if !WindowExistsAcrossDesktops(hwnd) {
+        window_desktop_cache.Delete(hwnd)
+        return 0
+    }
+    return window_desktop_cache[hwnd]
+}
+
+SetWindowDesktopCache(hwnd, desktop_num) {
+    global window_desktop_cache
+    if !IsSet(window_desktop_cache) || !(window_desktop_cache is Map)
+        window_desktop_cache := Map()
+    if (desktop_num <= 0)
+        return
+    window_desktop_cache[hwnd] := desktop_num
 }
 
 IsWindowOnCurrentDesktop(hwnd) {
@@ -216,39 +566,86 @@ ActivateWindowAcrossDesktops(hwnd) {
     if !WindowExistsAcrossDesktops(hwnd)
         return 0
 
+    if VirtualDesktopFocusDebugEnabled()
+        LogDesktopFocusDebug("activate_attempt", hwnd, GetWindowDesktopNum(hwnd))
+
     if VirtualDesktopSwitchOnFocus() {
         desktop_num := GetWindowDesktopNum(hwnd)
-        if (desktop_num > 0 && desktop_num != VD.getCurrentDesktopNum()) {
+        current_desktop := GetCurrentDesktopNumFresh()
+        if (desktop_num > 0 && desktop_num != current_desktop) {
+            curtain_visible := BeginDesktopSwitchCurtain()
             try {
                 VD.goToDesktopOfWindow("ahk_id " hwnd, true)
             } catch as err {
+                ; Fallback to direct desktop switch when goToDesktopOfWindow fails.
                 try {
-                    WinActivate "ahk_id " hwnd
-                } catch
+                    if VirtualDesktopFocusDebugEnabled()
+                        LogDesktopFocusDebug("switch_fallback", hwnd, desktop_num)
+                    VD.goToDesktopNum(desktop_num)
+                    VD.WaitDesktopSwitched(desktop_num)
+                } catch {
+                    LogDesktopFocusDebug("switch_failed", hwnd, desktop_num)
                     return 0
+                }
+            } finally {
+                EndDesktopSwitchCurtain(curtain_visible)
             }
-            try return WinGetID("A")
-            catch
+            try {
+                if VirtualDesktopFocusDebugEnabled()
+                    LogDesktopFocusDebug("activate_switched", hwnd, desktop_num)
+                WinActivate "ahk_id " hwnd
+                return WinGetID("A")
+            } catch
+                LogDesktopFocusDebug("activate_failed", hwnd, desktop_num)
                 return 0
         }
 
         if (desktop_num <= 0) {
             try {
-                VD.goToDesktopOfWindow("ahk_id " hwnd, true)
-                try return WinGetID("A")
-                catch
+                if VirtualDesktopFocusDebugEnabled()
+                    LogDesktopFocusDebug("switch_unknown", hwnd, desktop_num)
+                curtain_visible := BeginDesktopSwitchCurtain()
+                try {
+                    VD.goToDesktopOfWindow("ahk_id " hwnd, true)
+                } finally {
+                    EndDesktopSwitchCurtain(curtain_visible)
+                }
+                try {
+                    WinActivate "ahk_id " hwnd
+                    return WinGetID("A")
+                } catch
                     return 0
             } catch as err {
+                LogDesktopFocusDebug("switch_unknown_failed", hwnd, desktop_num)
                 ; fall through to direct activation
             }
         }
     }
 
     try {
+        if VirtualDesktopFocusDebugEnabled()
+            LogDesktopFocusDebug("activate_direct", hwnd, GetWindowDesktopNum(hwnd))
         WinActivate "ahk_id " hwnd
     } catch
         return 0
     try return WinGetID("A")
     catch
         return 0
+}
+
+LogDesktopFocusDebug(reason, hwnd, desktop_num := 0) {
+    log_dir := GetAppDataDir()
+    DirCreate(log_dir)
+    log_path := log_dir "\\vd.focus.debug.log"
+
+    exe_name := ""
+    title := ""
+    class_name := ""
+    try exe_name := WinGetProcessName("ahk_id " hwnd)
+    try title := WinGetTitle("ahk_id " hwnd)
+    try class_name := WinGetClass("ahk_id " hwnd)
+
+    line := "[" A_Now "] " reason " hwnd=" Format("0x{:X}", hwnd)
+    line .= " desktop=" desktop_num " exe=" exe_name " class=" class_name " title=" title
+    SafeFileAppend(line "`n", log_path)
 }

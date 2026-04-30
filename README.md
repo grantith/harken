@@ -33,6 +33,7 @@ Harken allows a keyboard-centered workflow on Windows: a single super modifier, 
 - Cycle stacked tiles with `super + [` and `super + ]`.
 - Cycle focus between tiles of the same program with `super + c`.
 - Show a hotkey menu with `super + /`.
+- Screen search hints with `super + .`.
 - Virtual desktops (native)
   - Navigate between desktops with better hotkeys
   - Assign custom hotkeys for the index-based virtual desktops.
@@ -67,6 +68,7 @@ Other
 - `super + alt` sends `ctrl + tab` (configurable via `global_hotkeys`)
 - `super + c` cycle through windows of the same app
 - `super + shift + c` cycle through windows of the same app on the current desktop
+- `super + .` screen search (click hints)
 - `super + alt + h/l` switch to previous/next virtual desktop
 - `super + alt + shift + h/l` move the active window to previous/next desktop (follow)
 - `super + w` open Window Selector (fuzzy find open windows)
@@ -80,6 +82,7 @@ Enter Command Mode with `super + ;`.
 - `r` to reload program/config
 - `e` to open config file
 - `w` opens a new window for the active program, if the program supports it
+- `g` reapply app desktop assignments
 - `n` toggles the command overlay on or off
 - `i` opens the [Helper Utility](#helper-utility)
 
@@ -99,7 +102,40 @@ Enter Command Mode with `super + ;`.
 - Start the program and enter command mode with `super + ;`. The binary is not currently signed and you will be warned by Windows. Clone and use `harken.ahk` directly as an alternative.
 - The program might fail on first run? Probably something to do with the config. For now you can create the config first to _maybe_ avoid the initial-crash scenario.
 - Press `e` to open the config file. You can also find it manually in `~/.config/harken/harken.toml` as it will be created on first run.
-- After making changes to your config you can reload the config (the entire program, actually) with `r` while in command mode.
+- After making changes to your config you can reload (the entire program) with `r` while in command mode.
+
+## Window Matching
+
+App entries under `apps` can match windows via `win_title` or a `match` map. The `match` map accepts
+`exe`, `class`, and `title`, plus `*_regex = true` to treat the value as a regex. You can also match
+by process tree with `match.process_tree`, which checks for ancestor/descendant executables.
+
+Use `exclude_titles` to ignore specific window titles for a given app. Each entry is a regex pattern
+and the match is case-insensitive unless you include your own `(?i)` prefix.
+
+```toml
+[apps.editor]
+hotkey = "v"
+match = { exe = "Code.exe", title = " - Visual Studio Code$", title_regex = true }
+exclude_titles = ["^Settings$", "^Welcome$"]
+```
+
+Process tree matching can split apps that share the same window executable:
+
+```toml
+[[apps]]
+id = "terminal"
+hotkey = "s"
+match = { exe = "alacritty.exe", process_tree = { mode = "descendant", exe = ["yazi.exe"], negate = true } }
+
+[[apps]]
+id = "yazi"
+hotkey = "y"
+match = { exe = "alacritty.exe", process_tree = { mode = "descendant", exe = ["yazi.exe"] } }
+```
+
+Add `debug = true` under `match.process_tree` to log process tree details to
+`%APPDATA%\harken\process_tree.debug.log`.
 
 ### All default keybindings
 
@@ -109,11 +145,12 @@ Enter Command Mode with `super + ;`.
 | --- | --- |
 | `super + /` | Show command overlay (temporary) |
 | `super + w` | Window selector (window walker) |
-| `super + c` | Cycle app windows on current desktop |
-| `super + shift + c` | Cycle app windows across desktops (not working) |
+| `super + .` | Screen search (click hints) |
+| `super + c` | Cycle app windows across desktops |
+| `super + shift + c` | Cycle app windows on current desktop |
 | `super + space` | Center width cycle |
 | `super + m` | Maximize/un-maximize |
-| `super + q` | Close window |
+| `alt + q` | Close window |
 | `super + Left/Right/Up/Down` | Resize window and snap to grids |
 | `super + shift + h/j/k/l` | Resize centered |
 | `super + ctrl + h/j/k/l` | Move window |
@@ -139,9 +176,14 @@ Enter Command Mode with `super + ;`.
 | Shortcut | Action |
 | --- | --- |
 | `super + alt + h/l` | Previous/next desktop |
+| `super + WheelUp/WheelDown` | Previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
 | `super + alt + shift + h/l` | Move window to previous/next desktop (follow) |
+| `super + alt + shift + WheelUp/WheelDown` | Move window to previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
 | `super + alt + <key>` | Go to mapped desktop (`[[virtual_desktop.<N>]]`) |
 | `super + alt + shift + <key>` | Move window to mapped desktop (follow) |
+| `virtual_desktop.auto_assign` | Move newly created windows that match `apps[]` with `desktop` set |
+| `virtual_desktop.debug_focus` | Log cross-desktop focus attempts to `%APPDATA%\harken\vd.focus.debug.log` |
+| `virtual_desktop.switch_curtain` | Dim overlay during desktop switches to reduce flicker |
 
 #### Apps (defaults)
 
@@ -164,6 +206,7 @@ These are examples for the launch-or-focus keybindings.
 | `w` | Open a new window for the active app |
 | `n` | Toggle command overlay |
 | `i` | Open window inspector |
+| `m` | Enter move mode |
 | `Esc` | Exit command mode |
 
 
@@ -172,6 +215,30 @@ These are examples for the launch-or-focus keybindings.
 - Use it to identify values for `apps[].win_title` in your config.
 - In Command Mode, press `i` to launch the window inspector.
 - Use Refresh to update the list; Copy Selected/All or Export to save results.
+
+### Config watcher
+
+Optional config file watcher that reloads the program when your config changes.
+
+```toml
+[config_watch]
+enabled = false
+interval_ms = 2500
+```
+
+### Screen search
+
+```toml
+[screen_search]
+enabled = true
+hotkey = "."
+hint_chars = "asdfghjklqwertyuiopzxcvbnm"
+max_results = 200
+min_size_px = 12
+min_distance_px = 40
+hint_opacity = 235
+debug_log = false
+```
 
 ## Limitations
 - This has not been tested with multi-monitor setups or much outside of ultra-wide monitors.
@@ -185,6 +252,8 @@ These are examples for the launch-or-focus keybindings.
   - License: `LICENSES/JXON_ahk2-LICENSE.md`
 - VD.ahk from https://github.com/FuPeiJiang/VD.ahk
   - License: `LICENSES/VD.ahk-LICENSE.md`
+- UIA.ahk v1.1.2 from https://github.com/Descolada/UIA-v2
+  - License: `LICENSES/UIA.ahk-LICENSE.md`
 
 ## Similar tools and inspirations
 
@@ -205,3 +274,19 @@ I really like komorebi--though I didn't use it for long and I have never been ab
 ### [GlazeWM](https://github.com/glzr-io/glazewm)
 
 GlazeWM is another popular tiling window manager for Windows operating systems.
+
+
+### Feature comparison (Harken vs similar Windows tools)
+
+| Feature | Harken | [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) | [komorebi](https://github.com/LGUG2Z/komorebi) | [GlazeWM](https://github.com/glzr-io/glazewm) |
+| --- | --- | --- | --- | --- |
+| Primary interaction model | Keyboard-first hotkeys and commands | Zone-based snapping (mouse + keyboard) | Dynamic tiling WM | Dynamic tiling WM |
+| Launch-or-focus app hotkeys | Yes (configurable per app) | No (outside scope) | Possible via external tooling/scripts | Possible via external tooling/scripts |
+| Directional focus movement | Yes (`alt + h/j/k/l`) | No | Yes | Yes |
+| Stack/window cycling | Yes (`super + [` / `super + ]`, app cycling) | Mostly | Yes (tiling containers/workspaces) | Yes (tiling containers/workspaces) |
+| Virtual desktop hotkeys | Yes (native desktop integration) | Indirect (PowerToys + Windows shortcuts) | Yes | Yes |
+| Freeform floating adjustments | Yes (move mode + resize controls) | Primarily zone snapping | Primarily tiling; floating is secondary | Primarily tiling; floating is secondary |
+| Built-in command/help overlay | Yes (`super + /`, command mode) | No | No built-in overlay | No built-in overlay |
+| Config format | TOML | GUI + JSON settings | JSON/YAML-style config | YAML |
+| Best fit | Users who want keyboard speed without fully committing to tiling | Users who want quick snap layouts | Users who want full tiling workflows | Users who want full tiling workflows |
+

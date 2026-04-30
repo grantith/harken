@@ -1,66 +1,114 @@
 config_version = 1
+
+# =============================================================
+# Harken configuration (example + reference)
+#
+# This file is intended to be the authoritative guide for
+# available settings and their usage. Copy it to your config
+# location and edit as needed.
+# =============================================================
+
 # Use one or more keys as super (CapsLock is the default).
+# In this example either key would work.
 super_key = ["F24", "CapsLock"]
 
-[[apps]]
-id = "browser"
+# -------------------------------------------------------------
+# Apps: launch-or-focus bindings + optional matching rules
+#
+# You can define apps as named tables under [apps] or as array
+# entries with [[apps]]. Named tables use the table key as id and
+# should NOT set `id` inside.
+#
+# Match sources (choose one):
+# - win_title: AHK window match string (e.g., "ahk_exe Code.exe")
+# - match: Map with exe/class/title and optional regex flags
+#
+# Matching notes:
+# - match.*_regex = true treats the corresponding field as regex
+# - exclude_titles is a list of regex patterns (case-insensitive)
+# - process_tree lets you match by ancestor/descendant executables
+# -------------------------------------------------------------
+
+[apps]
+
+[apps.browser]
 hotkey = "f"
 win_title = "ahk_exe floorp.exe"
 run = "floorp"
+run_paths = []
 # desktop = 2
 # follow_on_spawn = true
-run_paths = []
+# exclude_titles = [".*SilverBullet.*", ".*ChatGPT.*"]
 
-[[apps]]
-id = "files"
+[apps.files]
 hotkey = "e"
 win_title = "ahk_exe explorer.exe"
 run = "explorer"
 run_paths = []
 
-[[apps]]
-id = "editor"
+[apps.editor]
 hotkey = "v"
 win_title = "ahk_exe Code.exe"
 run = "code"
-# run_start_in = "C:\\projects"
 run_paths = []
+# run_start_in = "C:\\projects"
+# desktop = 2
 
-[[apps]]
-id = "terminal"
+[apps.terminal]
 hotkey = "s"
 win_title = "ahk_exe WindowsTerminal.exe"
 run = "wt"
 run_paths = []
 
-[[apps]]
-id = "notepad"
+[apps.notepad]
 hotkey = "n"
 win_title = "ahk_exe notepad++.exe"
 run = "notepad++"
 run_paths = []
 
-[[apps]]
-id = "chat"
+[apps.chat]
 hotkey = "t"
 win_title = "ahk_exe telegram.exe"
 run = "telegram"
 run_paths = []
 # desktop = 2
+# ignore_classes = ["Qt51518QWindowToolSaveBits"]
 
-[[apps]]
-id = "discord"
+[apps.discord]
 hotkey = "d"
 win_title = "ahk_exe discord.exe"
 run = "discord"
 run_paths = []
-# desktop = 2
+# exclude_titles = ["^Discord Updater$", "^Discord Canary$"]
 
-[[apps]]
-id = "vscode-border"
+# Match-only override (no hotkey): tweak focus border by title.
+[apps.vscode-border]
 match = { exe = "Code.exe", title = " - Visual Studio Code$", title_regex = true }
-# Optional per-app focus border tweaks.
-focus_border = { border_color = "#4D96FF", border_thickness = 3, corner_radius = 12lll }
+focus_border = { border_color = "#4D96FF", border_thickness = 7, corner_radius = 12 }
+
+# Process tree matching (example): split a terminal app and its child tool.
+#
+# [[apps]]
+# id = "terminal"
+# hotkey = "s"
+# match = { exe = "alacritty.exe", process_tree = { mode = "descendant", exe = ["yazi.exe"], negate = true, debug = true } }
+#
+# [[apps]]
+# id = "yazi"
+# hotkey = "y"
+# match = { exe = "alacritty.exe", process_tree = { mode = "descendant", exe = ["yazi.exe"], debug = true } }
+
+# process_tree options:
+# - mode: "ancestor" | "descendant" | "either" (default: descendant)
+# - exe: list of executables to search for (required)
+# - exe_regex: treat exe entries as regex (default: false)
+# - max_depth: limit traversal depth (0 = unlimited)
+# - negate: invert result (useful for “all except …”)
+# - debug: log details to %APPDATA%\harken\process_tree.debug.log
+
+# -------------------------------------------------------------
+# Global hotkeys (optional)
+# -------------------------------------------------------------
 
 [[global_hotkeys]]
 enabled = true
@@ -70,29 +118,57 @@ target_exes = []
 # Will require virtual desktop hotkeys to be used without pressing super first in the combo.
 send_keys = "^{Tab}"
 
+# -------------------------------------------------------------
+# Window management
+# -------------------------------------------------------------
+
 [window]
 resize_step = 20
 move_step = 20
 super_double_tap_ms = 300
+
 # Cycle app windows across all desktops.
-cycle_app_windows_hotkey = "c"
+cycle_app_windows_hotkey = "+c"
 # Cycle app windows on the current desktop only.
-cycle_app_windows_current_hotkey = "+c"
+cycle_app_windows_current_hotkey = "c"
 center_width_cycle_hotkey = "Space"
+# minimize_others_hotkey = "-"
 
 [window.move_mode]
 enable = true
 cancel_key = "Esc"
 
+# -------------------------------------------------------------
+# Window selector (window walker)
+# -------------------------------------------------------------
+
 [window_selector]
 enabled = true
 hotkey = "w"
-max_results = 12
+max_results = 30
 title_preview_len = 60
 match_title = true
 match_exe = true
 include_minimized = true
 close_on_focus_loss = true
+
+# -------------------------------------------------------------
+# Screen search (click hints)
+# -------------------------------------------------------------
+
+[screen_search]
+enabled = true
+hotkey = "."
+hint_chars = "asdfghjklqwertyuiopzxcvbnm"
+max_results = 200
+min_size_px = 12
+min_distance_px = 40
+hint_opacity = 235
+debug_log = false
+
+# -------------------------------------------------------------
+# Window manager (grid + gap)
+# -------------------------------------------------------------
 
 [window_manager]
 grid_size = 3
@@ -105,28 +181,54 @@ left = 4
 right = 4
 bottom = 5
 
+# -------------------------------------------------------------
+# Virtual desktops
+# -------------------------------------------------------------
+
 [virtual_desktop]
 enabled = true
 switch_on_focus = true
 ensure_count = 0
 cycle_prefer_current = true
+
+# Optional mouse wheel switching (super+wheel).
+# Keep disabled if you use super+wheel for resize elsewhere.
+scroll_switch = true
+
+[virtual_desktop.switch_curtain]
+enabled = true
+# 0-255 opacity (204 ~= 80%).
+opacity = 204
+color = "#202020"
+
 # Hotkey fields here use AHK syntax without super (super is implied).
 # Modifiers are applied by Harken (alt or alt+shift) for desktop actions.
 prev_hotkey = "h"
 next_hotkey = "l"
 move_prev_hotkey = "h"
 move_next_hotkey = "l"
+
 # Debug logs write to %APPDATA%\harken when enabled.
 debug_cycle = false
 debug_hotkeys = false
+# debug_focus = false
+
 tray_indicator = true
 tray_format = "{current}/{total}"
+
+# auto_assign applies only to apps with `desktop` set.
+# auto_assign = false
+# auto_assign_interval_ms = 500
 
 [[virtual_desktop.1]]
 hotkey = "1"
 
 [[virtual_desktop.2]]
 hotkey = "2"
+
+# -------------------------------------------------------------
+# Directional focus
+# -------------------------------------------------------------
 
 [directional_focus]
 # Directional focus was tricky to make good enough.
@@ -140,25 +242,32 @@ perpendicular_overlap_min = 0.2
 cross_monitor = false
 debug_enabled = false
 
+# -------------------------------------------------------------
+# Focus border
+# -------------------------------------------------------------
+
 [focus_border]
 enabled = true
 border_color = "#222feb"
 move_mode_color = "#2ECC71"
 command_mode_color = "#FFD400"
-border_thickness = 4
+border_thickness = 7
 corner_radius = 16
 update_interval_ms = 20
+
+# -------------------------------------------------------------
+# Helper overlay
+# -------------------------------------------------------------
 
 [helper]
 enabled = true
 overlay_opacity = 200
 
-[reload]
-enabled = true
-hotkey = "r"
-super_key_required = true
-watch_enabled = false
-watch_interval_ms = 2500
-mode_enabled = true
-mode_hotkey = ";"
-mode_timeout_ms = 20000
+# -------------------------------------------------------------
+# Config watcher
+# -------------------------------------------------------------
+
+[config_watch]
+enabled = false
+# Only used if WinAPI method has to fall back to polling.
+interval_ms = 2500

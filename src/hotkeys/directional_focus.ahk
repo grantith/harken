@@ -1,3 +1,4 @@
+; Directional focus hotkey bindings.
 global Config
 
 if Config.Has("directional_focus") && Config["directional_focus"]["enabled"] {

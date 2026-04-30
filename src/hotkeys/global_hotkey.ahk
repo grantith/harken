@@ -1,3 +1,4 @@
+; Global hotkey bindings (super + key combos).
 global Config
 
 for _, hotkey_config in Config["global_hotkeys"] {

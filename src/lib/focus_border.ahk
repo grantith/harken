@@ -3,6 +3,7 @@
 ; For Windows 11 (24H2)
 ; Runs continuously in the background.
 ; Adjust the border color, thickness, and corner roundness below.
+; Why: give a visible focus cue, plus mode-specific colors.
 ; ================================
 
 global Config

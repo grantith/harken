@@ -1,4 +1,5 @@
 global Config, AppState
+; Command overlay UI + helper toggle state.
 global command_helper_enabled := false
 global command_toast_gui := ""
 global command_toast_text := ""
@@ -217,6 +218,7 @@ ToggleCommandHelper() {
 
 ShowCommandToastTemporary() {
     global command_helper_enabled, command_toast_temp_visible
+    ; Allow the temporary overlay even if persistent helper overlay is disabled.
     command_toast_temp_visible := true
     ShowCommandToast(true)
     StartCommandToastInputHook()
@@ -284,6 +286,7 @@ CommandToastKeydownHandler(*) {
 CommandToastOnKeyDown(*) {
     if ReloadModeActive() || Window.IsMoveMode()
         return
+    ; Any input dismisses the temporary overlay in normal mode.
     HideCommandToast()
 }
 
@@ -342,6 +345,9 @@ BuildCommandToastModel() {
         lines.Push(FormatRow("i", "window inspector", key_width))
         lines.Push(FormatRow("n", "toggle command overlay", key_width))
         lines.Push(FormatRow("w", "new window (active app)", key_width))
+        if Config["window"]["move_mode"]["enable"]
+            lines.Push(FormatRow("m", "enter move mode", key_width))
+        lines.Push(FormatRow("g", "reapply app desktops", key_width))
         lines.Push(FormatRow("Esc/super", "exit command mode", key_width))
         model["mode"] := "command"
         model["title"] := "Command Mode"
@@ -366,13 +372,18 @@ BuildCommandToastRows(key_width := 16) {
     rows.Push(Map("key", "super+shift+h/j/k/l", "desc", "resize center"))
     rows.Push(Map("key", "super+ctrl+h/j/k/l", "desc", "move"))
     rows.Push(Map("key", "super+m", "desc", "maximize"))
+    rows.Push(Map("key", "double-super", "desc", "native overview"))
+    rows.Push(Map("key", "overview h/j/k/l", "desc", "navigate"))
     rows.Push(Map("key", "alt+-", "desc", "minimize"))
-    rows.Push(Map("key", "super+q", "desc", "close"))
+    rows.Push(Map("key", "alt+q", "desc", "close"))
     rows.Push(Map("key", "super+" Config["window"]["cycle_app_windows_hotkey"], "desc", "cycle app windows"))
     if (Config["window"]["cycle_app_windows_current_hotkey"] != "")
         rows.Push(Map("key", "super+" Config["window"]["cycle_app_windows_current_hotkey"], "desc", "cycle app windows (current desktop)"))
     if Config.Has("window_selector") && Config["window_selector"]["enabled"] {
         rows.Push(Map("key", "super+" Config["window_selector"]["hotkey"], "desc", "window selector"))
+    }
+    if Config.Has("screen_search") && Config["screen_search"]["enabled"] {
+        rows.Push(Map("key", "super+" Config["screen_search"]["hotkey"], "desc", "screen search"))
     }
     if Config.Has("directional_focus") && Config["directional_focus"]["enabled"] {
         rows.Push(Map("key", "alt+h/l", "desc", "focus left/right"))
@@ -387,7 +398,7 @@ BuildCommandToastRows(key_width := 16) {
     }
     rows.Push(Map("key", "", "desc", ""))
     rows.Push(Map("key", "Command Mode", "desc", ""))
-    rows.Push(Map("key", Config["reload"]["mode_hotkey"], "desc", "enter command mode"))
+    rows.Push(Map("key", ";", "desc", "enter command mode"))
     return rows
 }
 
