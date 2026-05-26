@@ -374,6 +374,7 @@ BuildCommandToastRows(key_width := 16) {
         rows.Push(Map("key", "super+shift+h/l", "desc", "carousel move"))
         rows.Push(Map("key", "super+j/k", "desc", "desktop next/prev"))
         rows.Push(Map("key", "super+shift+j/k", "desc", "move desktop (follow toggle)"))
+        rows.Push(Map("key", "super+space", "desc", "center active tile"))
         if Config["modes"]["carousel"]["native_desktop_reorder"]
             rows.Push(Map("key", "super+ctrl+shift+j/k", "desc", "reorder current desktop"))
         rows.Push(Map("key", "super+- / =", "desc", "current tile width -/+"))

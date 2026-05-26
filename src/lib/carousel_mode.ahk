@@ -2,6 +2,7 @@
 global Config
 global carousel_order_by_scope := Map()
 global carousel_tile_width_ratio := Map()
+global carousel_viewport_x_by_scope := Map()
 global carousel_last_active_hwnd := 0
 global carousel_last_scope_key := ""
 global carousel_last_relayout_tick := 0
@@ -54,7 +55,7 @@ CarouselAdjustCenterWidth(delta) {
     center_ratio := Min(0.9, Max(0.2, center_ratio))
     carousel_tile_width_ratio[active_hwnd] := center_ratio
     LogCarouselDebug("width_adjust hwnd=" Format("0x{:X}", active_hwnd) " center=" Round(center_ratio, 3))
-    CarouselRelayout()
+    CarouselRelayout("resize")
 }
 
 CarouselFocus(direction) {
@@ -91,8 +92,9 @@ CarouselFocus(direction) {
         return
 
     ActivateWindowAcrossDesktops(target_hwnd)
-    if Config["modes"]["carousel"]["auto_snap_center_on_focus"]
-        CarouselRelayout()
+    ; Always advance the carousel viewport on explicit carousel focus moves.
+    ; auto_snap_center_on_focus only controls passive/external focus changes.
+    CarouselRelayout("focus")
 }
 
 CarouselMove(direction) {
@@ -132,10 +134,10 @@ CarouselMove(direction) {
     windows[target_index] := temp
     SetCarouselScopeOrder(state["scope_key"], windows)
     ActivateWindowAcrossDesktops(active_hwnd)
-    CarouselRelayout()
+    CarouselRelayout("move")
 }
 
-CarouselRelayout(*) {
+CarouselRelayout(reason := "general") {
     if !CarouselModeEnabled()
         return
 
@@ -153,23 +155,52 @@ CarouselRelayout(*) {
     if (metrics["w"] <= 0 || metrics["h"] <= 0)
         return
 
-    center_ratio := GetTileCenterWidthRatio(active_hwnd)
-    side_ratio := Config["modes"]["carousel"]["side_width_ratio"]
-    max_side_ratio := (1.0 - center_ratio) / 2.0
-    side_ratio := Min(side_ratio, max_side_ratio)
     gap_px := Config["modes"]["carousel"]["gap_px"]
-    center_w := Round(metrics["w"] * center_ratio)
-    side_w := Round(metrics["w"] * side_ratio)
-    center_w := Min(Max(120, center_w), metrics["w"])
-    side_w := Min(Max(80, side_w), metrics["w"])
+    scope_key := state["scope_key"]
 
-    center_x := metrics["x"] + Round((metrics["w"] - center_w) / 2)
-    left_x := center_x - gap_px - side_w
-    right_x := center_x + center_w + gap_px
+    col_x := []
+    col_w := []
+    cursor_x := 0
+    for _, hwnd in windows {
+        width_px := GetTileWidthPx(hwnd, metrics["w"], gap_px)
+        col_x.Push(cursor_x)
+        col_w.Push(width_px)
+        cursor_x += width_px + gap_px
+    }
+    total_strip_width := Max(0, cursor_x - gap_px)
 
-    overflow_policy := Config["modes"]["carousel"]["overflow_policy"]
-    left_offscreen_x := metrics["x"] - side_w - gap_px
-    right_offscreen_x := metrics["x"] + metrics["w"] + gap_px
+    active_start := col_x[active_index]
+    active_width := col_w[active_index]
+    active_end := active_start + active_width
+    viewport_x := carousel_viewport_x_by_scope.Has(scope_key) ? carousel_viewport_x_by_scope[scope_key] : 0
+    reveal_margin := Config["modes"]["carousel"]["scroll_reveal_margin_px"]
+    max_margin := Max(0, Round((metrics["w"] - active_width) / 2))
+    reveal_margin := Min(reveal_margin, max_margin)
+
+    is_manual_center := (reason = "center" || reason = "manual")
+    if is_manual_center {
+        viewport_x := active_start - Round((metrics["w"] - active_width) / 2)
+    } else {
+        left_limit := viewport_x + reveal_margin
+        right_limit := viewport_x + metrics["w"] - reveal_margin
+        if (active_start < left_limit)
+            viewport_x := active_start - reveal_margin
+        else if (active_end > right_limit)
+            viewport_x := active_end + reveal_margin - metrics["w"]
+    }
+
+    min_viewport := 0
+    max_viewport := Max(0, total_strip_width - metrics["w"])
+    if is_manual_center {
+        ; Allow edge tiles to truly center, even if that reveals blank margin.
+        center_slack := Max(0, Round((metrics["w"] - active_width) / 2))
+        min_viewport -= center_slack
+        max_viewport += center_slack
+    }
+    viewport_x := Min(max_viewport, Max(min_viewport, viewport_x))
+    carousel_viewport_x_by_scope[scope_key] := viewport_x
+
+    resize_for_this_layout := ShouldResizeForRelayout(reason)
 
     for i, hwnd in windows {
         if !WindowExistsAcrossDesktops(hwnd)
@@ -177,19 +208,16 @@ CarouselRelayout(*) {
         if (WinGetMinMax("ahk_id " hwnd) = 1)
             WinRestore("ahk_id " hwnd)
 
-        if (i = active_index)
-            WinMoveEx(center_x, metrics["y"], center_w, metrics["h"], "ahk_id " hwnd)
-        else if (i = active_index - 1)
-            WinMoveEx(left_x, metrics["y"], side_w, metrics["h"], "ahk_id " hwnd)
-        else if (i = active_index + 1)
-            WinMoveEx(right_x, metrics["y"], side_w, metrics["h"], "ahk_id " hwnd)
-        else if (i < active_index) {
-            target_x := (overflow_policy = "stack_peek") ? left_x : left_offscreen_x
-            WinMoveEx(target_x, metrics["y"], side_w, metrics["h"], "ahk_id " hwnd)
-        } else {
-            target_x := (overflow_policy = "stack_peek") ? right_x : right_offscreen_x
-            WinMoveEx(target_x, metrics["y"], side_w, metrics["h"], "ahk_id " hwnd)
-        }
+        target_x := 0
+        target_y := metrics["y"]
+        target_w := col_w[i]
+        target_h := metrics["h"]
+        target_x := metrics["x"] + col_x[i] - viewport_x
+
+        ; Even when resize-on-focus is disabled, the active tile should still
+        ; restore to its own stored focus width when revisited.
+        allow_resize := resize_for_this_layout || (i = active_index)
+        MoveWindowIfNeeded(hwnd, target_x, target_y, target_w, target_h, allow_resize)
     }
 
     global carousel_last_relayout_tick
@@ -312,9 +340,11 @@ CarouselFocusWatcherTick(*) {
         carousel_last_scope_key := scope_key
         return
     }
-    if changed && Config["modes"]["carousel"]["auto_snap_center_on_focus"] {
+    ; Snap viewport to externally focused windows (Task View selection,
+    ; app hotkeys, mouse focus, etc.) without forcing auto-centering.
+    if changed {
         if (A_TickCount - carousel_last_relayout_tick > 250)
-            CarouselRelayout()
+            CarouselRelayout("focus")
     }
     carousel_last_active_hwnd := hwnd
     carousel_last_scope_key := scope_key
@@ -386,6 +416,43 @@ GetTileCenterWidthRatio(hwnd) {
     if carousel_tile_width_ratio.Has(hwnd) && !WindowExistsAcrossDesktops(hwnd)
         carousel_tile_width_ratio.Delete(hwnd)
     return default_ratio
+}
+
+GetTileWidthPx(hwnd, monitor_width, gap_px := 0) {
+    ratio := GetTileCenterWidthRatio(hwnd)
+    ; Account for one inter-tile gap so two default 50% tiles can sit flush
+    ; within the viewport without slight overflow-induced extra panning.
+    available_width := Max(120, monitor_width - gap_px)
+    width_px := Round(available_width * ratio)
+    width_px := Min(Max(120, width_px), monitor_width)
+    return width_px
+}
+
+ShouldResizeForRelayout(reason) {
+    if (reason = "resize" || reason = "move" || reason = "startup" || reason = "manual")
+        return true
+    return Config["modes"]["carousel"]["resize_on_focus"]
+}
+
+MoveWindowIfNeeded(hwnd, target_x, target_y, target_w, target_h, allow_resize := true) {
+    epsilon := Config["modes"]["carousel"]["layout_epsilon_px"]
+    x := 0
+    y := 0
+    w := 0
+    h := 0
+    try WinGetPosEx(&x, &y, &w, &h, "ahk_id " hwnd)
+    catch
+        return
+
+    move_needed := (Abs(x - target_x) > epsilon) || (Abs(y - target_y) > epsilon)
+    size_needed := (Abs(w - target_w) > epsilon) || (Abs(h - target_h) > epsilon)
+    if !move_needed && (!allow_resize || !size_needed)
+        return
+
+    if allow_resize
+        WinMoveEx(target_x, target_y, target_w, target_h, "ahk_id " hwnd)
+    else
+        WinMoveEx(target_x, target_y,,, "ahk_id " hwnd)
 }
 
 BuildCarouselState() {

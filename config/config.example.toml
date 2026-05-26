@@ -253,7 +253,9 @@ active = ""
 
 [modes.carousel]
 enabled = false
-auto_snap_center_on_focus = true
+# niri-like default: do not auto-center on every focus change.
+# Use super+space to center the active tile on demand.
+auto_snap_center_on_focus = false
 center_width_ratio = 0.5
 side_width_ratio = 0.25
 width_step = 0.05
@@ -263,6 +265,12 @@ include_minimized = false
 excluded_apps = ["PowerToys.PowerLauncher.exe"]
 # offscreen | stack_peek
 overflow_policy = "offscreen"
+# Keep tile sizes stable when focus changes.
+resize_on_focus = false
+# Skip tiny move/resize diffs to reduce jitter.
+layout_epsilon_px = 8
+# Keep focused tile away from hard viewport edges while scrolling.
+scroll_reveal_margin_px = 80
 ensure_empty_desktop = true
 # Experimental: use native Windows API to reorder desktop indices.
 native_desktop_reorder = false

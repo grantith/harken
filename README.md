@@ -164,6 +164,7 @@ When `modes.active = "carousel"` and `modes.carousel.enabled = true`, these key 
 | `super + shift + h/l` | Move carousel order left/right |
 | `super + j/k` | Next/previous virtual desktop |
 | `super + shift + j/k` | Move focused window to next/previous desktop |
+| `super + space` | Center active tile on demand |
 | `super + - / =` | Decrease/increase focused tile width |
 | `super + o` | Open native Task View overview |
 | `super + f` | Toggle desktop move follow behavior |

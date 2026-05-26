@@ -188,6 +188,9 @@ ConfigSchema() {
                 "include_minimized", "bool",
                 "excluded_apps", ["string"],
                 "overflow_policy", "string",
+                "resize_on_focus", "bool",
+                "layout_epsilon_px", "number",
+                "scroll_reveal_margin_px", "number",
                 "ensure_empty_desktop", "bool",
                 "native_desktop_reorder", "bool",
                 "desktop_move_follows_focus", "bool",
@@ -441,6 +444,10 @@ ValidateModes(config, errors) {
         errors.Push("config.modes.carousel.width_step must be between 0 and 1")
     if carousel.Has("gap_px") && carousel["gap_px"] < 0
         errors.Push("config.modes.carousel.gap_px must be >= 0")
+    if carousel.Has("layout_epsilon_px") && carousel["layout_epsilon_px"] < 0
+        errors.Push("config.modes.carousel.layout_epsilon_px must be >= 0")
+    if carousel.Has("scroll_reveal_margin_px") && carousel["scroll_reveal_margin_px"] < 0
+        errors.Push("config.modes.carousel.scroll_reveal_margin_px must be >= 0")
 
     if carousel.Has("overflow_policy") {
         policy := carousel["overflow_policy"]

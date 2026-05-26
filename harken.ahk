@@ -183,7 +183,7 @@ DefaultConfig() {
             "active", "",
             "carousel", Map(
                 "enabled", false,
-                "auto_snap_center_on_focus", true,
+                "auto_snap_center_on_focus", false,
                 "center_width_ratio", 0.5,
                 "side_width_ratio", 0.25,
                 "width_step", 0.05,
@@ -192,6 +192,9 @@ DefaultConfig() {
                 "include_minimized", false,
                 "excluded_apps", [],
                 "overflow_policy", "offscreen",
+                "resize_on_focus", false,
+                "layout_epsilon_px", 8,
+                "scroll_reveal_margin_px", 80,
                 "ensure_empty_desktop", true,
                 "native_desktop_reorder", false,
                 "desktop_move_follows_focus", true,
