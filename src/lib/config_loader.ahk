@@ -25,6 +25,7 @@ LoadConfig(config_path, default_config := Map()) {
     ValidateSuperKeys(config, errors)
     ValidateApps(config, errors)
     ValidateVirtualDesktopHotkeys(config, errors)
+    ValidateModes(config, errors)
 
     return Map(
         "config", config,
@@ -173,6 +174,40 @@ ConfigSchema() {
             "perpendicular_overlap_min", "number",
             "cross_monitor", "bool",
             "debug_enabled", "bool"
+        ),
+        "modes", Map(
+            "active", "string",
+            "carousel", Map(
+                "enabled", "bool",
+                "auto_snap_center_on_focus", "bool",
+                "center_width_ratio", "number",
+                "side_width_ratio", "number",
+                "width_step", "number",
+                "gap_px", "number",
+                "wrap_enabled", "bool",
+                "include_minimized", "bool",
+                "excluded_apps", ["string"],
+                "overflow_policy", "string",
+                "ensure_empty_desktop", "bool",
+                "native_desktop_reorder", "bool",
+                "desktop_move_follows_focus", "bool",
+                "focus_left_hotkey", "string",
+                "focus_right_hotkey", "string",
+                "move_left_hotkey", "string",
+                "move_right_hotkey", "string",
+                "desktop_prev_hotkey", "string",
+                "desktop_next_hotkey", "string",
+                "desktop_move_prev_hotkey", "string",
+                "desktop_move_next_hotkey", "string",
+                "desktop_reorder_up_hotkey", "string",
+                "desktop_reorder_down_hotkey", "string",
+                "overview_hotkey", "string",
+                "center_hotkey", "string",
+                "width_decrease_hotkey", "string",
+                "width_increase_hotkey", "string",
+                "toggle_follow_hotkey", "string",
+                "debug_enabled", "bool"
+            )
         ),
         "focus_border", Map(
             "enabled", "bool",
@@ -385,6 +420,32 @@ ValidateVirtualDesktopHotkeys(config, errors) {
             if (hotkey != "")
                 errors.Push("config.virtual_desktop.hotkey '" hotkey "' maps to desktop " desktop " but is already mapped to " existing)
         }
+    }
+}
+
+ValidateModes(config, errors) {
+    if !config.Has("modes") || !(config["modes"] is Map)
+        return
+    if !config["modes"].Has("carousel") || !(config["modes"]["carousel"] is Map)
+        return
+
+    carousel := config["modes"]["carousel"]
+    center_ratio := carousel.Has("center_width_ratio") ? carousel["center_width_ratio"] : 0.5
+    side_ratio := carousel.Has("side_width_ratio") ? carousel["side_width_ratio"] : 0.25
+    if (center_ratio <= 0 || center_ratio >= 1)
+        errors.Push("config.modes.carousel.center_width_ratio must be between 0 and 1")
+    if (side_ratio <= 0 || side_ratio >= 1)
+        errors.Push("config.modes.carousel.side_width_ratio must be between 0 and 1")
+    width_step := carousel.Has("width_step") ? carousel["width_step"] : 0.05
+    if (width_step <= 0 || width_step >= 1)
+        errors.Push("config.modes.carousel.width_step must be between 0 and 1")
+    if carousel.Has("gap_px") && carousel["gap_px"] < 0
+        errors.Push("config.modes.carousel.gap_px must be >= 0")
+
+    if carousel.Has("overflow_policy") {
+        policy := carousel["overflow_policy"]
+        if (policy != "offscreen" && policy != "stack_peek")
+            errors.Push("config.modes.carousel.overflow_policy must be offscreen or stack_peek")
     }
 }
 

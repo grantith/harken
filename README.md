@@ -156,6 +156,21 @@ Add `debug = true` under `match.process_tree` to log process tree details to
 | `super + ctrl + h/j/k/l` | Move window |
 | `super` (double tap) | Toggle move mode |
 
+When `modes.active = "carousel"` and `modes.carousel.enabled = true`, these key behaviors change:
+
+| Shortcut | Action |
+| --- | --- |
+| `super + h/l` | Carousel focus left/right (current desktop + active monitor) |
+| `super + shift + h/l` | Move carousel order left/right |
+| `super + j/k` | Next/previous virtual desktop |
+| `super + shift + j/k` | Move focused window to next/previous desktop |
+| `super + - / =` | Decrease/increase focused tile width |
+| `super + o` | Open native Task View overview |
+| `super + f` | Toggle desktop move follow behavior |
+
+Carousel mode also maintains one trailing empty virtual desktop when
+`modes.carousel.ensure_empty_desktop = true`.
+
 #### Window management (Move mode)
 
 | Shortcut | Action |

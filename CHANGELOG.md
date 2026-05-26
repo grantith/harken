@@ -12,6 +12,9 @@ All notable changes to this project are documented here. This changelog is human
 - Virtual desktop scroll navigation and move-window scroll support (`super+scroll` & `super+alt+shift+scroll`).
 - Optional desktop switch curtain to mask brief background flashes.
 - Project now uses CHANGELOG.md
+- Optional `modes.carousel` mode with niri-like horizontal focus/move behavior scoped to current virtual desktop and active monitor.
+- Carousel mode desktop move follow toggle (`super+f`) and native overview shortcut (`super+o`).
+- Carousel mode width controls (`super+-` / `super+=`) and auto-maintained trailing empty desktop support.
 
 ### Changed
 - Double-super now opens native Task View; move mode is entered from command mode, and h/j/k/l navigate Task View.
@@ -21,6 +24,8 @@ All notable changes to this project are documented here. This changelog is human
 - App matching now uses cached window metadata and PID-based lookups for off-desktop windows, with focus diagnostics logging.
 - README adds a comparison section with similar tools.
 - Config validation favors warnings over hard errors where possible.
+- Window manager grid movement hotkeys yield to carousel mode when active.
+- Carousel mode now auto-relayouts after external focus changes (Task View selection and app focus hotkeys).
 
 ### Fixed
 - Window walker rendering issues when the resolution changes.

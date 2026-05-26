@@ -64,11 +64,13 @@ SetWinDelay(-1)
 
 #Include src/lib/window_manager.ahk
 #Include src/lib/directional_focus.ahk
+#Include src/lib/carousel_mode.ahk
 #Include src/lib/focus_border.ahk
 #Include src/lib/window_walker.ahk
 #Include src/hotkeys/global_hotkey.ahk
 #Include src/hotkeys/apps.ahk
 #Include src/hotkeys/window.ahk
+#Include src/hotkeys/carousel.ahk
 #Include src/hotkeys/directional_focus.ahk
 #Include src/hotkeys/window_walker.ahk
 #Include src/hotkeys/screen_search.ahk
@@ -176,6 +178,40 @@ DefaultConfig() {
             "perpendicular_overlap_min", 0.2,
             "cross_monitor", false,
             "debug_enabled", false
+        ),
+        "modes", Map(
+            "active", "",
+            "carousel", Map(
+                "enabled", false,
+                "auto_snap_center_on_focus", true,
+                "center_width_ratio", 0.5,
+                "side_width_ratio", 0.25,
+                "width_step", 0.05,
+                "gap_px", 12,
+                "wrap_enabled", false,
+                "include_minimized", false,
+                "excluded_apps", [],
+                "overflow_policy", "offscreen",
+                "ensure_empty_desktop", true,
+                "native_desktop_reorder", false,
+                "desktop_move_follows_focus", true,
+                "focus_left_hotkey", "h",
+                "focus_right_hotkey", "l",
+                "move_left_hotkey", "+h",
+                "move_right_hotkey", "+l",
+                "desktop_prev_hotkey", "k",
+                "desktop_next_hotkey", "j",
+                "desktop_move_prev_hotkey", "+k",
+                "desktop_move_next_hotkey", "+j",
+                "desktop_reorder_up_hotkey", "^+k",
+                "desktop_reorder_down_hotkey", "^+j",
+                "overview_hotkey", "o",
+                "center_hotkey", "Space",
+                "width_decrease_hotkey", "-",
+                "width_increase_hotkey", "=",
+                "toggle_follow_hotkey", "f",
+                "debug_enabled", false
+            )
         ),
         "focus_border", Map(
             "enabled", true,

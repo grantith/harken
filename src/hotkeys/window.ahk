@@ -867,15 +867,17 @@ MoveWindowToDesktopNumber(desktop_num) {
 }
 
 HotIf (*) => IsSuperKeyPressed() && !IsAltPressed()
-Hotkey(center_cycle_hotkey, CenterWidthCycle)
 Hotkey("Left", (*) => ResizeActiveWindow(-resize_step, 0))
 Hotkey("Right", (*) => ResizeActiveWindow(resize_step, 0))
 Hotkey("Up", (*) => ResizeActiveWindow(0, -resize_step))
 Hotkey("Down", (*) => ResizeActiveWindow(0, resize_step))
-Hotkey("+h", (*) => ResizeActiveWindowCentered(-resize_step, 0))
-Hotkey("+l", (*) => ResizeActiveWindowCentered(resize_step, 0))
-Hotkey("+j", (*) => ResizeActiveWindowCentered(0, -resize_step))
-Hotkey("+k", (*) => ResizeActiveWindowCentered(0, resize_step))
+if !CarouselModeEnabled() {
+    Hotkey(center_cycle_hotkey, CenterWidthCycle)
+    Hotkey("+h", (*) => ResizeActiveWindowCentered(-resize_step, 0))
+    Hotkey("+l", (*) => ResizeActiveWindowCentered(resize_step, 0))
+    Hotkey("+j", (*) => ResizeActiveWindowCentered(0, -resize_step))
+    Hotkey("+k", (*) => ResizeActiveWindowCentered(0, resize_step))
+}
 Hotkey("^h", (*) => MoveActiveWindow(-move_step, 0))
 Hotkey("^l", (*) => MoveActiveWindow(move_step, 0))
 Hotkey("^j", (*) => MoveActiveWindow(0, move_step))

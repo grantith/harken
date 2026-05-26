@@ -369,7 +369,19 @@ BuildCommandToastRows(key_width := 16) {
     rows := []
     rows.Push(Map("key", "Window", "desc", ""))
     rows.Push(Map("key", "super+arrows", "desc", "resize"))
-    rows.Push(Map("key", "super+shift+h/j/k/l", "desc", "resize center"))
+    if CarouselModeEnabled() {
+        rows.Push(Map("key", "super+h/l", "desc", "carousel focus"))
+        rows.Push(Map("key", "super+shift+h/l", "desc", "carousel move"))
+        rows.Push(Map("key", "super+j/k", "desc", "desktop next/prev"))
+        rows.Push(Map("key", "super+shift+j/k", "desc", "move desktop (follow toggle)"))
+        if Config["modes"]["carousel"]["native_desktop_reorder"]
+            rows.Push(Map("key", "super+ctrl+shift+j/k", "desc", "reorder current desktop"))
+        rows.Push(Map("key", "super+- / =", "desc", "current tile width -/+"))
+        rows.Push(Map("key", "super+o", "desc", "native overview"))
+        rows.Push(Map("key", "super+f", "desc", "toggle desktop move follow"))
+    } else {
+        rows.Push(Map("key", "super+shift+h/j/k/l", "desc", "resize center"))
+    }
     rows.Push(Map("key", "super+ctrl+h/j/k/l", "desc", "move"))
     rows.Push(Map("key", "super+m", "desc", "maximize"))
     rows.Push(Map("key", "double-super", "desc", "native overview"))

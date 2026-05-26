@@ -46,6 +46,7 @@ class VD {
             idx_GetDesktops:7,
             idx_SwitchDesktop:9,
             idx_CreateDesktop:10,
+            idx_MoveDesktop:-1,
             idx_RemoveDesktop:11,
             idx_FindDesktop:12,
             ; get/set
@@ -73,6 +74,7 @@ class VD {
             idx_GetDesktops:7,
             idx_SwitchDesktop:9,
             idx_CreateDesktop:10,
+            idx_MoveDesktop:-1,
             idx_RemoveDesktop:11,
             idx_FindDesktop:12,
             ; get/set
@@ -100,6 +102,7 @@ class VD {
             idx_GetDesktops:7,
             idx_SwitchDesktop:9,
             idx_CreateDesktop:10,
+            idx_MoveDesktop:-1,
             idx_RemoveDesktop:12,
             idx_FindDesktop:13,
             ; get/set
@@ -127,6 +130,7 @@ class VD {
             idx_GetDesktops:8,
             idx_SwitchDesktop:10,
             idx_CreateDesktop:11,
+            idx_MoveDesktop:12,
             idx_RemoveDesktop:13,
             idx_FindDesktop:14,
             ; get/set
@@ -154,6 +158,7 @@ class VD {
             idx_GetDesktops:7,
             idx_SwitchDesktop:9,
             idx_CreateDesktop:10,
+            idx_MoveDesktop:-1,
             idx_RemoveDesktop:12,
             idx_FindDesktop:13,
             ; get/set
@@ -181,6 +186,7 @@ class VD {
             idx_GetDesktops:7,
             idx_SwitchDesktop:9,
             idx_CreateDesktop:10,
+            idx_MoveDesktop:11,
             idx_RemoveDesktop:12,
             idx_FindDesktop:13,
             ; get/set
@@ -208,6 +214,7 @@ class VD {
             idx_GetDesktops:7,
             idx_SwitchDesktop:9,
             idx_CreateDesktop:11,
+            idx_MoveDesktop:12,
             idx_RemoveDesktop:13,
             idx_FindDesktop:14,
             ; get/set
@@ -664,6 +671,21 @@ class VD {
             VD.IVirtualDesktopManagerInternal.SwitchDesktop(IVirtualDesktop_ofNewDesktop)
         }
     }
+    static moveDesktop(desktopNum, targetDesktopNum) {
+        if !VD.version.HasOwnProp("idx_MoveDesktop") || (VD.version.idx_MoveDesktop <= 0)
+            return false
+        VD.IVirtualDesktopListChanged()
+        count := VD.IVirtualDesktopList.Length
+        if (desktopNum < 1 || desktopNum > count)
+            return false
+        if (targetDesktopNum < 1 || targetDesktopNum > count)
+            return false
+        if (desktopNum = targetDesktopNum)
+            return true
+        VD.IVirtualDesktopManagerInternal.MoveDesktop(VD.IVirtualDesktopList[desktopNum], targetDesktopNum - 1)
+        VD.IVirtualDesktopListChanged()
+        return true
+    }
     static removeDesktop(desktopNum := VD.currentDesktopNum, fallback_desktopNum := -1) {
         if (VD.IVirtualDesktopList.Length == 1) {
             return ;can't delete last
@@ -877,6 +899,11 @@ class VD {
             ComCall(this.version.idx_CreateDesktop, this.IVirtualDesktopManagerInternal, "Ptr*", &IVirtualDesktop_created := 0)
             return IVirtualDesktop_created
         }
+        MoveDesktop(IVirtualDesktop, zero_based_index) {
+            if !this.version.HasOwnProp("idx_MoveDesktop") || (this.version.idx_MoveDesktop <= 0)
+                throw Error("MoveDesktop is unavailable for this Windows build")
+            ComCall(this.version.idx_MoveDesktop, this.IVirtualDesktopManagerInternal, "Ptr", IVirtualDesktop, "Int", zero_based_index)
+        }
         RemoveDesktop(IVirtualDesktop, IVirtualDesktop_fallback) {
             ComCall(this.version.idx_RemoveDesktop, this.IVirtualDesktopManagerInternal, "Ptr", IVirtualDesktop, "Ptr", IVirtualDesktop_fallback)
         }
@@ -1027,8 +1054,13 @@ class VD {
             VD.IVirtualDesktopListChanged() ; called after CurrentVirtualDesktopChanged
         }
         _common_CurrentVirtualDesktopChanged(IVirtualDesktop_old, IVirtualDesktop_new) {
-            desktopNum_old := VD.IVirtualDesktopMap[IVirtualDesktop_old]
-            VD.currentDesktopNum := VD.IVirtualDesktopMap[IVirtualDesktop_new]
+            desktopNum_old := VD.IVirtualDesktopMap.Has(IVirtualDesktop_old) ? VD.IVirtualDesktopMap[IVirtualDesktop_old] : 0
+            desktopNum_new := VD.IVirtualDesktopMap.Has(IVirtualDesktop_new) ? VD.IVirtualDesktopMap[IVirtualDesktop_new] : 0
+            if (desktopNum_new <= 0) {
+                VD.IVirtualDesktopListChanged()
+                desktopNum_new := VD.IVirtualDesktopMap.Has(IVirtualDesktop_new) ? VD.IVirtualDesktopMap[IVirtualDesktop_new] : VD.currentDesktopNum
+            }
+            VD.currentDesktopNum := desktopNum_new
             if (VD.WinActivate_callback) {
                 VD.WinActivate_callback.Call()
             }

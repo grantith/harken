@@ -243,6 +243,49 @@ cross_monitor = false
 debug_enabled = false
 
 # -------------------------------------------------------------
+# Modes (optional)
+# -------------------------------------------------------------
+
+[modes]
+# "carousel" enables niri-like horizontal focus/move behavior.
+# Use "" to keep the default grid-oriented movement keys.
+active = ""
+
+[modes.carousel]
+enabled = false
+auto_snap_center_on_focus = true
+center_width_ratio = 0.5
+side_width_ratio = 0.25
+width_step = 0.05
+gap_px = 12
+wrap_enabled = false
+include_minimized = false
+excluded_apps = ["PowerToys.PowerLauncher.exe"]
+# offscreen | stack_peek
+overflow_policy = "offscreen"
+ensure_empty_desktop = true
+# Experimental: use native Windows API to reorder desktop indices.
+native_desktop_reorder = false
+# super+shift+j/k move-to-desktop follows focus when true.
+desktop_move_follows_focus = true
+focus_left_hotkey = "h"
+focus_right_hotkey = "l"
+move_left_hotkey = "+h"
+move_right_hotkey = "+l"
+desktop_prev_hotkey = "k"
+desktop_next_hotkey = "j"
+desktop_move_prev_hotkey = "+k"
+desktop_move_next_hotkey = "+j"
+desktop_reorder_up_hotkey = "^+k"
+desktop_reorder_down_hotkey = "^+j"
+overview_hotkey = "o"
+center_hotkey = "Space"
+width_decrease_hotkey = "-"
+width_increase_hotkey = "="
+toggle_follow_hotkey = "f"
+debug_enabled = false
+
+# -------------------------------------------------------------
 # Focus border
 # -------------------------------------------------------------
 

@@ -51,6 +51,7 @@ class Window
             && !GetKeyState('Ctrl', 'P')
             && !GetKeyState('LAlt', 'P')
             && !GetKeyState('RAlt', 'P')
+            && !CarouselModeEnabled()
             && !this.IsMoveMode()
         Hotkey('*k', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveUp')))
         Hotkey('*h', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveLeft')))
@@ -186,7 +187,13 @@ class Window
 
 
 
-    static IsException(id := 'A') => InStr(Window.exceptions, WinGetClass(id))
+    static IsException(id := 'A') {
+        ; Windows can disappear between enumeration and class lookup.
+        try class_name := WinGetClass(id)
+        catch
+            return true
+        return InStr(Window.exceptions, class_name)
+    }
 
 
 
