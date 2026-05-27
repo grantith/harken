@@ -224,7 +224,8 @@ DefaultConfig() {
                 "text_color", "#CCCCCC",
                 "active_color", "#A020F0",
                 "font_size", 10,
-                "title_max_len", 26
+                "title_max_len", 26,
+                "window_display", "icon"
             ),
             "debug_enabled", false
         )

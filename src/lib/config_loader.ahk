@@ -219,7 +219,8 @@ ConfigSchema() {
                     "text_color", "string",
                     "active_color", "string",
                     "font_size", "number",
-                    "title_max_len", "number"
+                    "title_max_len", "number",
+                    "window_display", "string"
                 ),
                 "debug_enabled", "bool"
             )

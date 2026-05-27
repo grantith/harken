@@ -173,7 +173,7 @@ Carousel mode also maintains one trailing empty virtual desktop when
 `modes.carousel.ensure_empty_desktop = true`.
 
 Carousel mode can show a persistent status bar (`modes.carousel.status_bar.enabled = true`)
-with desktop count/active desktop highlighting and the current desktop strip window titles.
+with desktop count/active desktop highlighting and the current desktop strip window titles or app icons (`modes.carousel.status_bar.window_display`).
 Status bar design inspiration: EngineeringMechanicsB's AHKVirtualDesktop project.
 
 Carousel mode also does best-effort persistence for per-app tile width and strip order.

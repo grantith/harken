@@ -8,6 +8,7 @@ global carousel_status_bar_window_ctrls := []
 global carousel_status_bar_last_key := ""
 global carousel_status_bar_last_layout_key := ""
 global carousel_status_bar_vd_listener_registered := false
+global carousel_status_bar_icon_path_cache := Map()
 
 InitCarouselStatusBar() {
     if !CarouselModeEnabled() {
@@ -105,6 +106,7 @@ BuildCarouselStatusBarModel(settings) {
     state := BuildCarouselState()
     windows := state["windows"]
     active_hwnd := state["active_hwnd"]
+    window_display := CarouselStatusBarWindowDisplay(settings)
 
     window_cells := []
     for _, hwnd in windows {
@@ -120,10 +122,12 @@ BuildCarouselStatusBarModel(settings) {
             else
                 title := "(untitled)"
         }
+        icon_path := GetCarouselStatusBarIconPath(hwnd)
         title := CarouselStatusBarTruncate(title, settings["title_max_len"])
         window_cells.Push(Map(
             "hwnd", hwnd,
             "title", title,
+            "icon_path", icon_path,
             "active", hwnd = active_hwnd
         ))
     }
@@ -132,8 +136,12 @@ BuildCarouselStatusBarModel(settings) {
     for _, d in desktop_cells
         key .= d["active"] ? ("[" d["num"] "]") : d["num"]
     key .= "|"
-    for _, w in window_cells
-        key .= (w["active"] ? "*" : "") w["hwnd"] ":" w["title"] "|"
+    for _, w in window_cells {
+        if (window_display = "icon")
+            key .= (w["active"] ? "*" : "") w["hwnd"] ":" w["icon_path"] "|"
+        else
+            key .= (w["active"] ? "*" : "") w["hwnd"] ":" w["title"] "|"
+    }
 
     layout_key := "d:" desktop_cells.Length "|w:" window_cells.Length
 
@@ -156,6 +164,36 @@ CarouselStatusBarTruncate(text, max_len) {
     if (max_len <= 3)
         return SubStr(text, 1, max_len)
     return SubStr(text, 1, max_len - 3) "..."
+}
+
+CarouselStatusBarWindowDisplay(settings) {
+    mode := "title"
+    if settings.Has("window_display")
+        mode := StrLower(settings["window_display"])
+    if (mode != "title" && mode != "icon")
+        mode := "title"
+    return mode
+}
+
+GetCarouselStatusBarIconPath(hwnd) {
+    global carousel_status_bar_icon_path_cache
+    if !hwnd
+        return "shell32.dll"
+    if carousel_status_bar_icon_path_cache.Has(hwnd) {
+        cached := carousel_status_bar_icon_path_cache[hwnd]
+        if (cached != "" && FileExist(cached))
+            return cached
+    }
+
+    path := ""
+    try path := WinGetProcessPath("ahk_id " hwnd)
+    if (path != "" && FileExist(path)) {
+        carousel_status_bar_icon_path_cache[hwnd] := path
+        return path
+    }
+
+    carousel_status_bar_icon_path_cache[hwnd] := "shell32.dll"
+    return "shell32.dll"
 }
 
 CreateCarouselStatusBarGui(model, settings) {
@@ -216,13 +254,39 @@ BuildCarouselStatusBarControls(model, settings) {
     }
 
     carousel_status_bar_gui.SetFont("s" font_size " c" text_color, "Segoe UI")
-    windows_prefix := carousel_status_bar_gui.AddText("x+20 yp", "Strip:")
+    windows_prefix := carousel_status_bar_gui.AddText("x+14 yp", "|")
     carousel_status_bar_window_ctrls.Push(windows_prefix)
 
+    window_display := CarouselStatusBarWindowDisplay(settings)
     win_cells := model["window_cells"]
     if (win_cells.Length = 0) {
         empty_ctrl := carousel_status_bar_gui.AddText("x+8 yp", "(no windows)")
         carousel_status_bar_window_ctrls.Push(empty_ctrl)
+        return
+    }
+
+    if (window_display = "icon") {
+        windows_prefix.GetPos(&prefix_x, &prefix_y, &prefix_w, &prefix_h)
+        icon_size := 16
+        icon_y := prefix_y - 1
+        underline_y := icon_y + icon_size + 1
+        x_cursor := prefix_x + prefix_w + 8
+        for _, cell in win_cells {
+            icon_opts := "x" x_cursor " y" icon_y " w" icon_size " h" icon_size " Icon1"
+            icon_ctrl := carousel_status_bar_gui.AddPicture(icon_opts, cell["icon_path"])
+
+            underline_color := cell["active"] ? active_color : text_color
+            underline_token := cell["active"] ? "*" : " "
+            carousel_status_bar_gui.SetFont("s8 w700 c" underline_color, "Segoe UI")
+            underline_ctrl := carousel_status_bar_gui.AddText("x" x_cursor " y" underline_y " w" icon_size " Center", underline_token)
+
+            carousel_status_bar_window_ctrls.Push(Map(
+                "underline", underline_ctrl,
+                "icon", icon_ctrl,
+                "mode", "icon"
+            ))
+            x_cursor += icon_size + 10
+        }
         return
     }
 
@@ -260,11 +324,35 @@ UpdateCarouselStatusBarContent(model) {
     }
 
     win_cells := model["window_cells"]
+    window_display := CarouselStatusBarWindowDisplay(Config["modes"]["carousel"]["status_bar"])
+
+    if (window_display = "icon") {
+        for i, cell in win_cells {
+            ctrl_index := i + 1
+            if (ctrl_index > carousel_status_bar_window_ctrls.Length)
+                continue
+            entry := carousel_status_bar_window_ctrls[ctrl_index]
+            if !(entry is Map)
+                continue
+            underline_color := cell["active"] ? active_color : text_color
+            underline_token := cell["active"] ? "*" : " "
+            underline_ctrl := entry["underline"]
+            underline_ctrl.SetFont("s8 w700 c" underline_color, "Segoe UI")
+            underline_ctrl.Text := underline_token
+
+            icon_ctrl := entry["icon"]
+            try icon_ctrl.Value := "*Icon1 " cell["icon_path"]
+        }
+        return
+    }
+
     for i, cell in win_cells {
         ctrl_index := i + 1
         if (ctrl_index > carousel_status_bar_window_ctrls.Length)
             continue
         ctrl := carousel_status_bar_window_ctrls[ctrl_index]
+        if (ctrl is Map)
+            continue
         color := cell["active"] ? active_color : text_color
         weight := "w500"
         ctrl.SetFont("s" font_size " " weight " c" color, "Segoe UI")

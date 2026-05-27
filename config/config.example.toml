@@ -308,6 +308,8 @@ active_color = "#A020F0"
 font_size = 10
 # Max title characters per window in strip preview.
 title_max_len = 26
+# title | icon
+window_display = "icon"
 
 # -------------------------------------------------------------
 # Focus border

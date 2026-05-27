@@ -4,12 +4,8 @@ global Config
 if CarouselModeEnabled() {
     carousel := Config["modes"]["carousel"]
 
-    ; Bind focus moves with explicit modifier guards so Shift variants remain
-    ; available for tile reordering and do not get swallowed by super+h/l.
-    HotIf (*) => IsSuperKeyPressed() && !IsAltPressed() && !GetKeyState("Shift", "P") && !GetKeyState("Ctrl", "P") && !Window.IsMoveMode()
-    Hotkey(carousel["focus_left_hotkey"], (*) => CarouselFocus("left"))
-    Hotkey(carousel["focus_right_hotkey"], (*) => CarouselFocus("right"))
-    HotIf
+    RegisterSuperComboHotkey(carousel["focus_left_hotkey"], (*) => CarouselHandleHorizontalKey("left"))
+    RegisterSuperComboHotkey(carousel["focus_right_hotkey"], (*) => CarouselHandleHorizontalKey("right"))
     RegisterSuperComboHotkey(carousel["desktop_prev_hotkey"], (*) => CarouselHandleDesktopKey(-1))
     RegisterSuperComboHotkey(carousel["desktop_next_hotkey"], (*) => CarouselHandleDesktopKey(1))
     RegisterSuperComboHotkey(carousel["center_hotkey"], (*) => CarouselRelayout("center"))
@@ -19,16 +15,23 @@ if CarouselModeEnabled() {
     if (carousel["toggle_follow_hotkey"] != "")
         RegisterSuperComboHotkey(carousel["toggle_follow_hotkey"], (*) => ToggleCarouselDesktopMoveFollow())
 
-    ; Modified hotkeys (Shift/Ctrl variants) must use HotIf/Hotkey,
-    ; because combo bindings cannot include AHK modifier prefixes like + or ^.
-    HotIf (*) => IsSuperKeyPressed() && !IsAltPressed() && GetKeyState("Shift", "P") && !GetKeyState("Ctrl", "P") && !Window.IsMoveMode()
-    Hotkey(carousel["move_left_hotkey"], (*) => CarouselMove("left"))
-    Hotkey(carousel["move_right_hotkey"], (*) => CarouselMove("right"))
-    HotIf
-
     ; Snap windows into carousel layout shortly after startup/reload.
     SetTimer((*) => CarouselRelayout("startup"), -150)
     SetTimer(CarouselFocusWatcherTick, 250)
     SetTimer((*) => EnsureCarouselTrailingEmptyDesktop(), -600)
     SetTimer((*) => InitCarouselStatusBar(), -200)
+}
+
+CarouselHandleHorizontalKey(direction) {
+    if !CarouselModeEnabled() || Window.IsMoveMode()
+        return
+    if IsAltPressed()
+        return
+    if GetKeyState("Ctrl", "P")
+        return
+    if GetKeyState("Shift", "P") {
+        CarouselMove(direction)
+        return
+    }
+    CarouselFocus(direction)
 }
