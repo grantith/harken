@@ -441,21 +441,7 @@ EnsureCarouselTrailingEmptyDesktop() {
         return
     if !Config["modes"]["carousel"]["ensure_empty_desktop"]
         return
-
-    occupied := GetOccupiedDesktopSet()
-    highest_occupied := 0
-    for desktop_num, _ in occupied {
-        if (desktop_num > highest_occupied)
-            highest_occupied := desktop_num
-    }
-
-    desired := Max(1, highest_occupied + 1)
-    RefreshVirtualDesktopState()
-    count := VD.getCount()
-    if (count < desired)
-        VD.createUntil(desired)
-
-    ; Keep this non-destructive. Avoid auto-removing desktops that might hold state.
+    EnsureVirtualDesktopTrailingEmpty(true)
 }
 
 ScheduleEnsureCarouselTrailingEmptyDesktop(delay_ms := 700) {
@@ -470,27 +456,6 @@ CarouselEnsureEmptyDesktopDeferredTick(*) {
     global carousel_ensure_empty_pending
     try EnsureCarouselTrailingEmptyDesktop()
     carousel_ensure_empty_pending := false
-}
-
-GetOccupiedDesktopSet() {
-    set := Map()
-    windows := GetWindowsAcrossDesktops()
-    for _, hwnd in windows {
-        if !WindowExistsAcrossDesktops(hwnd)
-            continue
-        if Window.IsException("ahk_id " hwnd)
-            continue
-        ex_style := 0
-        try ex_style := WinGetExStyle("ahk_id " hwnd)
-        catch
-            continue
-        if (ex_style & 0x80) || (ex_style & 0x8000000)
-            continue
-        desktop_num := GetWindowDesktopNum(hwnd)
-        if (desktop_num > 0)
-            set[desktop_num] := true
-    }
-    return set
 }
 
 GetTileCenterWidthRatio(hwnd) {

@@ -77,6 +77,8 @@ SetWinDelay(-1)
 #Include src/hotkeys/screen_search.ahk
 #Include src/hotkeys/unbound.ahk
 
+SetTimer((*) => InitCarouselStatusBar(), -200)
+
 DefaultConfig() {
     return Map(
         "config_version", 1,
@@ -147,12 +149,18 @@ DefaultConfig() {
             "enabled", true,
             "switch_on_focus", true,
             "ensure_count", 0,
+            "ensure_trailing_empty", true,
+            "fast_switch_non_carousel", true,
             "cycle_prefer_current", true,
             "scroll_switch", false,
             "switch_curtain", Map(
                 "enabled", true,
                 "opacity", 204,
                 "color", "#202020"
+            ),
+            "status_bar", Map(
+                "enabled", true,
+                "show_in_non_carousel", false
             ),
             "prev_hotkey", "h",
             "next_hotkey", "l",

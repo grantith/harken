@@ -29,6 +29,8 @@ All notable changes to this project are documented here. This changelog is human
 - Carousel mode now auto-relayouts after external focus changes (Task View selection and app focus hotkeys).
 - Carousel tile width adjustments now persist per app executable across restarts.
 - Carousel strip order now restores best-effort per desktop+monitor scope using app executable order.
+- Non-carousel desktop switching can now skip the post-switch wait for faster focus changes, and trailing empty desktop management now creates and prunes desktops to keep exactly one empty desktop at the end.
+- Status bar enablement is now controlled globally from `virtual_desktop.status_bar`, with optional visibility in non-carousel mode.
 
 ### Fixed
 - Window walker rendering issues when the resolution changes.

@@ -172,8 +172,10 @@ When `modes.active = "carousel"` and `modes.carousel.enabled = true`, these key 
 Carousel mode also maintains one trailing empty virtual desktop when
 `modes.carousel.ensure_empty_desktop = true`.
 
-Carousel mode can show a persistent status bar (`modes.carousel.status_bar.enabled = true`)
-with desktop count/active desktop highlighting and the current desktop strip window titles or app icons (`modes.carousel.status_bar.window_display`).
+The desktop status bar is globally enabled through `virtual_desktop.status_bar.enabled`.
+Set `virtual_desktop.status_bar.show_in_non_carousel = true` to show it outside carousel mode too.
+Carousel mode adds the current desktop's window strip using the appearance settings under
+`modes.carousel.status_bar` such as `window_display`.
 Status bar design inspiration: EngineeringMechanicsB's AHKVirtualDesktop project.
 
 Carousel mode also does best-effort persistence for per-app tile width and strip order.
@@ -206,9 +208,12 @@ can degrade when desktop indices or monitor numbering change.
 | `super + alt + shift + WheelUp/WheelDown` | Move window to previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
 | `super + alt + <key>` | Go to mapped desktop (`[[virtual_desktop.<N>]]`) |
 | `super + alt + shift + <key>` | Move window to mapped desktop (follow) |
+| `virtual_desktop.fast_switch_non_carousel` | Skip the post-switch wait in non-carousel mode for faster desktop focus changes |
+| `virtual_desktop.ensure_trailing_empty` | Keep exactly one trailing empty virtual desktop by creating and pruning as needed |
 | `virtual_desktop.auto_assign` | Move newly created windows that match `apps[]` with `desktop` set |
 | `virtual_desktop.debug_focus` | Log cross-desktop focus attempts to `%APPDATA%\harken\vd.focus.debug.log` |
 | `virtual_desktop.switch_curtain` | Dim overlay during desktop switches to reduce flicker |
+| `virtual_desktop.status_bar` | Global desktop status bar enablement; `show_in_non_carousel` extends it beyond carousel mode |
 
 #### Apps (defaults)
 

@@ -128,12 +128,18 @@ ConfigSchema() {
             "enabled", "bool",
             "switch_on_focus", "bool",
             "ensure_count", "number",
+            "ensure_trailing_empty", "bool",
+            "fast_switch_non_carousel", "bool",
             "cycle_prefer_current", "bool",
             "scroll_switch", "bool",
             "switch_curtain", Map(
                 "enabled", "bool",
                 "opacity", "number",
                 "color", "string"
+            ),
+            "status_bar", Map(
+                "enabled", "bool",
+                "show_in_non_carousel", "bool"
             ),
             "prev_hotkey", "string",
             "next_hotkey", "string",

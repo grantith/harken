@@ -189,6 +189,8 @@ bottom = 5
 enabled = true
 switch_on_focus = true
 ensure_count = 0
+ensure_trailing_empty = true
+fast_switch_non_carousel = true
 cycle_prefer_current = true
 
 # Optional mouse wheel switching (super+wheel).
@@ -200,6 +202,11 @@ enabled = true
 # 0-255 opacity (204 ~= 80%).
 opacity = 204
 color = "#202020"
+
+[virtual_desktop.status_bar]
+enabled = true
+# Show the desktop bar outside carousel mode too.
+show_in_non_carousel = false
 
 # Hotkey fields here use AHK syntax without super (super is implied).
 # Modifiers are applied by Harken (alt or alt+shift) for desktop actions.
@@ -294,7 +301,6 @@ toggle_follow_hotkey = "f"
 debug_enabled = false
 
 [modes.carousel.status_bar]
-enabled = true
 # top | bottom
 position = "top"
 height_px = 34

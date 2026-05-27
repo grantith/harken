@@ -797,15 +797,16 @@ GoToRelativeDesktop(delta) {
         return
     target := VD.modulusResolveDesktopNum(current + delta)
     LogVirtualDesktopAction("goto_relative current=" current " delta=" delta " target=" target)
-    RefreshVirtualDesktopState()
     curtain_visible := BeginDesktopSwitchCurtain()
     try {
         VD.goToDesktopNum(target)
-        VD.WaitDesktopSwitched(target)
+        if !VirtualDesktopFastSwitchNonCarousel()
+            VD.WaitDesktopSwitched(target)
     } finally {
         EndDesktopSwitchCurtain(curtain_visible)
     }
-    RefreshVirtualDesktopState()
+    ScheduleEnsureVirtualDesktopTrailingEmpty()
+    try ScheduleCarouselStatusBarUpdate(80)
 }
 
 GoToDesktopNumber(desktop_num) {
@@ -814,16 +815,16 @@ GoToDesktopNumber(desktop_num) {
     if (desktop_num <= 0)
         return
     LogVirtualDesktopAction("goto_absolute target=" desktop_num " current=" GetCurrentDesktopNumFresh())
-    RefreshVirtualDesktopState()
-    GetCurrentDesktopNumFresh()
     curtain_visible := BeginDesktopSwitchCurtain()
     try {
         VD.goToDesktopNum(desktop_num)
-        VD.WaitDesktopSwitched(desktop_num)
+        if !VirtualDesktopFastSwitchNonCarousel()
+            VD.WaitDesktopSwitched(desktop_num)
     } finally {
         EndDesktopSwitchCurtain(curtain_visible)
     }
-    RefreshVirtualDesktopState()
+    ScheduleEnsureVirtualDesktopTrailingEmpty()
+    try ScheduleCarouselStatusBarUpdate(80)
 }
 
 MoveWindowToRelativeDesktop(delta) {
@@ -845,7 +846,8 @@ MoveWindowToRelativeDesktop(delta) {
     } finally {
         EndDesktopSwitchCurtain(curtain_visible)
     }
-    RefreshVirtualDesktopState()
+    ScheduleEnsureVirtualDesktopTrailingEmpty()
+    try ScheduleCarouselStatusBarUpdate(80)
 }
 
 MoveWindowToDesktopNumber(desktop_num) {
@@ -854,8 +856,6 @@ MoveWindowToDesktopNumber(desktop_num) {
     if (desktop_num <= 0)
         return
     LogVirtualDesktopAction("move_absolute target=" desktop_num " current=" GetCurrentDesktopNumFresh())
-    RefreshVirtualDesktopState()
-    GetCurrentDesktopNumFresh()
     curtain_visible := BeginDesktopSwitchCurtain()
     try {
         VD.MoveWindowToDesktopNum("A", desktop_num, true)
@@ -863,7 +863,8 @@ MoveWindowToDesktopNumber(desktop_num) {
     } finally {
         EndDesktopSwitchCurtain(curtain_visible)
     }
-    RefreshVirtualDesktopState()
+    ScheduleEnsureVirtualDesktopTrailingEmpty()
+    try ScheduleCarouselStatusBarUpdate(80)
 }
 
 HotIf (*) => IsSuperKeyPressed() && !IsAltPressed()

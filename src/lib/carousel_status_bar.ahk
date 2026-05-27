@@ -11,11 +11,7 @@ global carousel_status_bar_vd_listener_registered := false
 global carousel_status_bar_icon_path_cache := Map()
 
 InitCarouselStatusBar() {
-    if !CarouselModeEnabled() {
-        DestroyCarouselStatusBar()
-        return
-    }
-    if !CarouselStatusBarConfigEnabled() {
+    if !VirtualDesktopStatusBarVisibleInCurrentMode() {
         DestroyCarouselStatusBar()
         return
     }
@@ -38,20 +34,34 @@ CarouselStatusBarDesktopChanged(*) {
 }
 
 CarouselStatusBarConfigEnabled() {
-    if !Config.Has("modes") || !(Config["modes"] is Map)
-        return false
-    if !Config["modes"].Has("carousel") || !(Config["modes"]["carousel"] is Map)
-        return false
-    carousel := Config["modes"]["carousel"]
-    if !carousel.Has("status_bar") || !(carousel["status_bar"] is Map)
-        return false
-    return carousel["status_bar"]["enabled"]
+    return VirtualDesktopStatusBarEnabled()
+}
+
+GetCarouselStatusBarSettings() {
+    if Config.Has("modes") && (Config["modes"] is Map) && Config["modes"].Has("carousel") {
+        carousel := Config["modes"]["carousel"]
+        if (carousel is Map && carousel.Has("status_bar") && (carousel["status_bar"] is Map))
+            return carousel["status_bar"]
+    }
+    return Map(
+        "enabled", true,
+        "position", "top",
+        "height_px", 34,
+        "reserve_gap_px", 4,
+        "opacity", 220,
+        "background_color", "#181818",
+        "text_color", "#CCCCCC",
+        "active_color", "#A020F0",
+        "font_size", 10,
+        "title_max_len", 26,
+        "window_display", "icon"
+    )
 }
 
 CarouselStatusBarReservedTopPx(*) {
-    if !CarouselModeEnabled() || !CarouselStatusBarConfigEnabled()
+    if !CarouselModeEnabled() || !VirtualDesktopStatusBarVisibleInCurrentMode()
         return 0
-    settings := Config["modes"]["carousel"]["status_bar"]
+    settings := GetCarouselStatusBarSettings()
     if (settings["position"] != "top")
         return 0
     return settings["height_px"] + settings["reserve_gap_px"]
@@ -59,12 +69,12 @@ CarouselStatusBarReservedTopPx(*) {
 
 CarouselStatusBarUpdate(*) {
     global carousel_status_bar_gui, carousel_status_bar_visible, carousel_status_bar_last_key, carousel_status_bar_last_layout_key
-    if !CarouselModeEnabled() || !CarouselStatusBarConfigEnabled() {
+    if !VirtualDesktopStatusBarVisibleInCurrentMode() {
         DestroyCarouselStatusBar()
         return
     }
 
-    settings := Config["modes"]["carousel"]["status_bar"]
+    settings := GetCarouselStatusBarSettings()
     model := BuildCarouselStatusBarModel(settings)
     if !(model is Map)
         return
@@ -103,9 +113,14 @@ BuildCarouselStatusBarModel(settings) {
         ))
     }
 
-    state := BuildCarouselState()
-    windows := state["windows"]
-    active_hwnd := state["active_hwnd"]
+    show_windows := CarouselModeEnabled()
+    windows := []
+    active_hwnd := 0
+    if show_windows {
+        state := BuildCarouselState()
+        windows := state["windows"]
+        active_hwnd := state["active_hwnd"]
+    }
     window_display := CarouselStatusBarWindowDisplay(settings)
 
     window_cells := []
@@ -132,7 +147,7 @@ BuildCarouselStatusBarModel(settings) {
         ))
     }
 
-    key := active_desktop "/" desktop_total "|"
+    key := active_desktop "/" desktop_total "|show_windows=" (show_windows ? 1 : 0) "|"
     for _, d in desktop_cells
         key .= d["active"] ? ("[" d["num"] "]") : d["num"]
     key .= "|"
@@ -143,13 +158,14 @@ BuildCarouselStatusBarModel(settings) {
             key .= (w["active"] ? "*" : "") w["hwnd"] ":" w["title"] "|"
     }
 
-    layout_key := "d:" desktop_cells.Length "|w:" window_cells.Length
+    layout_key := "d:" desktop_cells.Length "|w:" window_cells.Length "|show_windows=" (show_windows ? 1 : 0)
 
     model := Map(
         "desktop_total", desktop_total,
         "active_desktop", active_desktop,
         "desktop_cells", desktop_cells,
         "window_cells", window_cells,
+        "show_windows", show_windows,
         "layout_key", layout_key,
         "key", key
     )
@@ -253,6 +269,9 @@ BuildCarouselStatusBarControls(model, settings) {
         is_first_desktop := false
     }
 
+    if !model["show_windows"]
+        return
+
     carousel_status_bar_gui.SetFont("s" font_size " c" text_color, "Segoe UI")
     windows_prefix := carousel_status_bar_gui.AddText("x+14 yp", "|")
     carousel_status_bar_window_ctrls.Push(windows_prefix)
@@ -306,9 +325,10 @@ BuildCarouselStatusBarControls(model, settings) {
 UpdateCarouselStatusBarContent(model) {
     global carousel_status_bar_desktop_ctrls, carousel_status_bar_window_ctrls
 
-    text_color := NormalizeHexColor(Config["modes"]["carousel"]["status_bar"]["text_color"], "CCCCCC")
-    active_color := NormalizeHexColor(Config["modes"]["carousel"]["status_bar"]["active_color"], "A020F0")
-    font_size := Config["modes"]["carousel"]["status_bar"]["font_size"]
+    settings := GetCarouselStatusBarSettings()
+    text_color := NormalizeHexColor(settings["text_color"], "CCCCCC")
+    active_color := NormalizeHexColor(settings["active_color"], "A020F0")
+    font_size := settings["font_size"]
 
     desktop_cells := model["desktop_cells"]
     for i, cell in desktop_cells {
@@ -324,7 +344,9 @@ UpdateCarouselStatusBarContent(model) {
     }
 
     win_cells := model["window_cells"]
-    window_display := CarouselStatusBarWindowDisplay(Config["modes"]["carousel"]["status_bar"])
+    if !model["show_windows"]
+        return
+    window_display := CarouselStatusBarWindowDisplay(settings)
 
     if (window_display = "icon") {
         for i, cell in win_cells {
