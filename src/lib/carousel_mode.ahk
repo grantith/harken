@@ -1,12 +1,14 @@
 ; Carousel mode helpers (niri-like horizontal focus/workflow per desktop+monitor).
-global Config
+global Config, AppState
 global carousel_order_by_scope := Map()
 global carousel_tile_width_ratio := Map()
 global carousel_viewport_x_by_scope := Map()
 global carousel_last_active_hwnd := 0
 global carousel_last_scope_key := ""
+global carousel_last_active_by_scope := Map()
 global carousel_last_relayout_tick := 0
 global carousel_ensure_empty_pending := false
+global carousel_status_bar_update_pending := false
 
 IsCarouselModeActive() {
     if !Config.Has("modes") || !(Config["modes"] is Map)
@@ -55,6 +57,7 @@ CarouselAdjustCenterWidth(delta) {
     center_ratio := GetTileCenterWidthRatio(active_hwnd) + delta * step
     center_ratio := Min(0.9, Max(0.2, center_ratio))
     carousel_tile_width_ratio[active_hwnd] := center_ratio
+    PersistCarouselWidthPreference(active_hwnd, center_ratio)
     LogCarouselDebug("width_adjust hwnd=" Format("0x{:X}", active_hwnd) " center=" Round(center_ratio, 3))
     CarouselRelayout("resize")
 }
@@ -92,10 +95,14 @@ CarouselFocus(direction) {
     if (target_hwnd = active_hwnd && !wrap)
         return
 
-    ActivateWindowAcrossDesktops(target_hwnd)
+    activated_hwnd := ActivateCarouselWindow(target_hwnd)
+    if activated_hwnd
+        state["active_hwnd"] := activated_hwnd
+    else
+        state["active_hwnd"] := target_hwnd
     ; Always advance the carousel viewport on explicit carousel focus moves.
     ; auto_snap_center_on_focus only controls passive/external focus changes.
-    CarouselRelayout("focus")
+    CarouselRelayout("focus", state)
 }
 
 CarouselMove(direction) {
@@ -130,19 +137,21 @@ CarouselMove(direction) {
     if (target_index = current_index)
         return
 
-    temp := windows[current_index]
-    windows[current_index] := windows[target_index]
-    windows[target_index] := temp
+    moving_hwnd := windows[current_index]
+    windows.RemoveAt(current_index)
+    windows.InsertAt(target_index, moving_hwnd)
     SetCarouselScopeOrder(state["scope_key"], windows)
-    ActivateWindowAcrossDesktops(active_hwnd)
-    CarouselRelayout("move")
+    PersistCarouselScopeOrder(state["scope_key"], windows)
+    ActivateCarouselWindow(active_hwnd)
+    CarouselRelayout("move", state)
 }
 
-CarouselRelayout(reason := "general") {
+CarouselRelayout(reason := "general", state := "") {
     if !CarouselModeEnabled()
         return
 
-    state := BuildCarouselState()
+    if !(state is Map)
+        state := BuildCarouselState()
     windows := state["windows"]
     if (windows.Length = 0)
         return
@@ -223,7 +232,36 @@ CarouselRelayout(reason := "general") {
 
     global carousel_last_relayout_tick
     carousel_last_relayout_tick := A_TickCount
-    CarouselStatusBarUpdate()
+    ScheduleCarouselStatusBarUpdate()
+}
+
+ActivateCarouselWindow(hwnd) {
+    if !hwnd
+        return 0
+    if !WindowExistsAcrossDesktops(hwnd)
+        return 0
+    ; Carousel windows are already filtered to current desktop/monitor.
+    ; Prefer direct activation to avoid extra virtual desktop API calls.
+    try {
+        WinActivate "ahk_id " hwnd
+        return WinGetID("A")
+    } catch {
+        return ActivateWindowAcrossDesktops(hwnd)
+    }
+}
+
+ScheduleCarouselStatusBarUpdate(delay_ms := 40) {
+    global carousel_status_bar_update_pending
+    if carousel_status_bar_update_pending
+        return
+    carousel_status_bar_update_pending := true
+    SetTimer(CarouselStatusBarUpdateDeferredTick, -delay_ms)
+}
+
+CarouselStatusBarUpdateDeferredTick(*) {
+    global carousel_status_bar_update_pending
+    try CarouselStatusBarUpdate()
+    carousel_status_bar_update_pending := false
 }
 
 CarouselSwitchDesktop(delta) {
@@ -235,7 +273,7 @@ CarouselSwitchDesktop(delta) {
         return
     GoToRelativeDesktopFast(delta)
     ScheduleEnsureCarouselTrailingEmptyDesktop()
-    SetTimer((*) => CarouselStatusBarUpdate(), -80)
+    ScheduleCarouselStatusBarUpdate(80)
 }
 
 CarouselHandleDesktopKey(delta) {
@@ -257,7 +295,7 @@ CarouselMoveWindowDesktop(delta) {
     if !CarouselModeEnabled()
         return
     MoveWindowToRelativeDesktopWithFollow(delta, CarouselDesktopMoveFollowsFocus())
-    SetTimer((*) => CarouselStatusBarUpdate(), -80)
+    ScheduleCarouselStatusBarUpdate(80)
 }
 
 CarouselMoveCurrentDesktop(delta) {
@@ -288,12 +326,19 @@ CarouselMoveCurrentDesktop(delta) {
         LogCarouselDebug("desktop_reorder_failed current=" current " target=" target " err=" err.Message)
     }
     RefreshVirtualDesktopState()
-    CarouselStatusBarUpdate()
+    ScheduleCarouselStatusBarUpdate()
 }
 
 MoveWindowToRelativeDesktopWithFollow(delta, follow_desktop := true) {
     if !VirtualDesktopEnabled()
         return
+    moving_hwnd := WinGetID("A")
+    if !moving_hwnd
+        return
+    source_monitor := Screen.FromWindow("ahk_id " moving_hwnd)
+    if (source_monitor <= 0)
+        source_monitor := MonitorGetPrimary()
+
     RefreshVirtualDesktopState()
     current := GetCurrentDesktopNumFresh()
     if (current <= 0)
@@ -308,9 +353,40 @@ MoveWindowToRelativeDesktopWithFollow(delta, follow_desktop := true) {
     } else {
         VD.MoveWindowToDesktopNum("A", target, false)
     }
+
+    IntegrateMovedWindowIntoDestinationScope(moving_hwnd, target, source_monitor)
+
     RefreshVirtualDesktopState()
     ScheduleEnsureCarouselTrailingEmptyDesktop()
-    CarouselStatusBarUpdate()
+    ScheduleCarouselStatusBarUpdate()
+}
+
+IntegrateMovedWindowIntoDestinationScope(moving_hwnd, target_desktop_num, monitor_num) {
+    if !moving_hwnd
+        return
+    if (target_desktop_num <= 0 || monitor_num <= 0)
+        return
+
+    scope_key := target_desktop_num ":" monitor_num
+    discovered := GetCarouselWindows(monitor_num, target_desktop_num)
+
+    active_hwnd := 0
+    if carousel_last_active_by_scope.Has(scope_key)
+        active_hwnd := carousel_last_active_by_scope[scope_key]
+
+    ordered := BuildScopeOrder(scope_key, discovered, active_hwnd)
+    moving_index := CarouselIndexOf(ordered, moving_hwnd)
+    if (moving_index > 0)
+        ordered.RemoveAt(moving_index)
+
+    anchor_index := CarouselIndexOf(ordered, active_hwnd)
+    if (anchor_index > 0)
+        ordered.InsertAt(anchor_index + 1, moving_hwnd)
+    else
+        ordered.Push(moving_hwnd)
+
+    SetCarouselScopeOrder(scope_key, ordered)
+    carousel_last_active_by_scope[scope_key] := moving_hwnd
 }
 
 GoToRelativeDesktopFast(delta) {
@@ -344,7 +420,7 @@ CarouselFocusWatcherTick(*) {
     if (changed && IsOverviewActive()) {
         carousel_last_active_hwnd := hwnd
         carousel_last_scope_key := scope_key
-        CarouselStatusBarUpdate()
+        ScheduleCarouselStatusBarUpdate()
         return
     }
     ; Snap viewport to externally focused windows (Task View selection,
@@ -355,8 +431,9 @@ CarouselFocusWatcherTick(*) {
     }
     carousel_last_active_hwnd := hwnd
     carousel_last_scope_key := scope_key
+    carousel_last_active_by_scope[scope_key] := hwnd
     if changed
-        CarouselStatusBarUpdate()
+        ScheduleCarouselStatusBarUpdate()
 }
 
 EnsureCarouselTrailingEmptyDesktop() {
@@ -424,7 +501,69 @@ GetTileCenterWidthRatio(hwnd) {
         return carousel_tile_width_ratio[hwnd]
     if carousel_tile_width_ratio.Has(hwnd) && !WindowExistsAcrossDesktops(hwnd)
         carousel_tile_width_ratio.Delete(hwnd)
+
+    persisted_ratio := GetPersistedCarouselWidthRatio(hwnd)
+    if (persisted_ratio != "") {
+        carousel_tile_width_ratio[hwnd] := persisted_ratio
+        return persisted_ratio
+    }
+
     return default_ratio
+}
+
+GetPersistedCarouselWidthRatio(hwnd) {
+    global AppState
+    if !(AppState is Map)
+        return ""
+    if !AppState.Has("carousel_tile_width_ratio_by_exe")
+        return ""
+
+    ratio_by_exe := AppState["carousel_tile_width_ratio_by_exe"]
+    if !(ratio_by_exe is Map)
+        return ""
+
+    app_key := GetCarouselPersistentWidthKey(hwnd)
+    if (app_key = "") || !ratio_by_exe.Has(app_key)
+        return ""
+
+    persisted_ratio := ratio_by_exe[app_key]
+    if !IsNumber(persisted_ratio)
+        return ""
+
+    persisted_ratio := Min(0.9, Max(0.2, persisted_ratio))
+    LogCarouselDebug("width_restore key=" app_key " center=" Round(persisted_ratio, 3))
+    return persisted_ratio
+}
+
+PersistCarouselWidthPreference(hwnd, center_ratio) {
+    global AppState
+    app_key := GetCarouselPersistentWidthKey(hwnd)
+    if (app_key = "")
+        return
+
+    if !(AppState is Map)
+        AppState := Map()
+    if !AppState.Has("carousel_tile_width_ratio_by_exe") || !(AppState["carousel_tile_width_ratio_by_exe"] is Map)
+        AppState["carousel_tile_width_ratio_by_exe"] := Map()
+
+    ratio_by_exe := AppState["carousel_tile_width_ratio_by_exe"]
+    ratio_by_exe[app_key] := center_ratio
+    SaveState(AppState)
+    LogCarouselDebug("width_persist key=" app_key " center=" Round(center_ratio, 3))
+}
+
+GetCarouselPersistentWidthKey(hwnd) {
+    return GetCarouselPersistentAppKey(hwnd)
+}
+
+GetCarouselPersistentAppKey(hwnd) {
+    if !hwnd
+        return ""
+    process_name := ""
+    try process_name := StrLower(WinGetProcessName("ahk_id " hwnd))
+    if !process_name
+        return ""
+    return process_name
 }
 
 GetTileWidthPx(hwnd, monitor_width, gap_px := 0) {
@@ -541,8 +680,15 @@ CarouselExcludedProcess(process_name, excluded_apps) {
 
 BuildScopeOrder(scope_key, discovered, active_hwnd) {
     existing := []
+    used_persisted_order := false
     if carousel_order_by_scope.Has(scope_key)
         existing := carousel_order_by_scope[scope_key]
+    else {
+        persisted_order := BuildPersistedScopeOrder(scope_key, discovered)
+        used_persisted_order := (persisted_order.Length > 0)
+        if used_persisted_order
+            existing := persisted_order
+    }
     ordered := []
     seen := Map()
 
@@ -562,11 +708,99 @@ BuildScopeOrder(scope_key, discovered, active_hwnd) {
         }
     }
 
-    if (active_hwnd && CarouselIndexOf(ordered, active_hwnd) = 0 && CarouselIndexOf(discovered, active_hwnd) > 0)
+    if !used_persisted_order && (active_hwnd && CarouselIndexOf(ordered, active_hwnd) = 0 && CarouselIndexOf(discovered, active_hwnd) > 0)
         ordered.InsertAt(1, active_hwnd)
 
     SetCarouselScopeOrder(scope_key, ordered)
+    PersistCarouselScopeOrder(scope_key, ordered)
     return ordered
+}
+
+BuildPersistedScopeOrder(scope_key, discovered) {
+    ordered := []
+    seen := Map()
+    persisted_keys := GetPersistedCarouselScopeOrderKeys(scope_key)
+    if (persisted_keys.Length = 0)
+        return ordered
+
+    ; Best-effort restore maps persisted app order to current live windows.
+    ; Duplicate app windows are consumed in discovery order.
+    for _, app_key in persisted_keys {
+        if !app_key
+            continue
+        for _, hwnd in discovered {
+            if seen.Has(hwnd)
+                continue
+            if (GetCarouselPersistentAppKey(hwnd) != app_key)
+                continue
+            ordered.Push(hwnd)
+            seen[hwnd] := true
+            break
+        }
+    }
+
+    if (ordered.Length > 0)
+        LogCarouselDebug("order_restore scope=" scope_key " matched=" ordered.Length " discovered=" discovered.Length)
+    return ordered
+}
+
+GetPersistedCarouselScopeOrderKeys(scope_key) {
+    global AppState
+    if !(AppState is Map)
+        return []
+    if !AppState.Has("carousel_order_by_scope")
+        return []
+
+    by_scope := AppState["carousel_order_by_scope"]
+    if !(by_scope is Map)
+        return []
+    if !by_scope.Has(scope_key)
+        return []
+
+    persisted_keys := by_scope[scope_key]
+    if !(persisted_keys is Array)
+        return []
+    return persisted_keys
+}
+
+PersistCarouselScopeOrder(scope_key, windows) {
+    global AppState
+    if !(windows is Array)
+        return
+
+    keys := []
+    for _, hwnd in windows {
+        app_key := GetCarouselPersistentAppKey(hwnd)
+        if app_key
+            keys.Push(app_key)
+    }
+    if (keys.Length = 0)
+        return
+
+    if !(AppState is Map)
+        AppState := Map()
+    if !AppState.Has("carousel_order_by_scope") || !(AppState["carousel_order_by_scope"] is Map)
+        AppState["carousel_order_by_scope"] := Map()
+
+    by_scope := AppState["carousel_order_by_scope"]
+    if by_scope.Has(scope_key) && (by_scope[scope_key] is Array) && CarouselStringArraysEqual(by_scope[scope_key], keys)
+        return
+
+    by_scope[scope_key] := keys
+    SaveState(AppState)
+    LogCarouselDebug("order_persist scope=" scope_key " windows=" windows.Length)
+}
+
+CarouselStringArraysEqual(a, b) {
+    if !(a is Array) || !(b is Array)
+        return false
+    if (a.Length != b.Length)
+        return false
+    for i, value in a {
+        if (value != b[i])
+            return false
+    }
+    return true
 }
 
 SetCarouselScopeOrder(scope_key, windows) {

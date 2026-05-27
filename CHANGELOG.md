@@ -27,6 +27,8 @@ All notable changes to this project are documented here. This changelog is human
 - Config validation favors warnings over hard errors where possible.
 - Window manager grid movement hotkeys yield to carousel mode when active.
 - Carousel mode now auto-relayouts after external focus changes (Task View selection and app focus hotkeys).
+- Carousel tile width adjustments now persist per app executable across restarts.
+- Carousel strip order now restores best-effort per desktop+monitor scope using app executable order.
 
 ### Fixed
 - Window walker rendering issues when the resolution changes.

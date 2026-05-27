@@ -4,8 +4,12 @@ global Config
 if CarouselModeEnabled() {
     carousel := Config["modes"]["carousel"]
 
-    RegisterSuperComboHotkey(carousel["focus_left_hotkey"], (*) => CarouselFocus("left"))
-    RegisterSuperComboHotkey(carousel["focus_right_hotkey"], (*) => CarouselFocus("right"))
+    ; Bind focus moves with explicit modifier guards so Shift variants remain
+    ; available for tile reordering and do not get swallowed by super+h/l.
+    HotIf (*) => IsSuperKeyPressed() && !IsAltPressed() && !GetKeyState("Shift", "P") && !GetKeyState("Ctrl", "P") && !Window.IsMoveMode()
+    Hotkey(carousel["focus_left_hotkey"], (*) => CarouselFocus("left"))
+    Hotkey(carousel["focus_right_hotkey"], (*) => CarouselFocus("right"))
+    HotIf
     RegisterSuperComboHotkey(carousel["desktop_prev_hotkey"], (*) => CarouselHandleDesktopKey(-1))
     RegisterSuperComboHotkey(carousel["desktop_next_hotkey"], (*) => CarouselHandleDesktopKey(1))
     RegisterSuperComboHotkey(carousel["center_hotkey"], (*) => CarouselRelayout("center"))

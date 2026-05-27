@@ -7,7 +7,6 @@ global carousel_status_bar_desktop_ctrls := []
 global carousel_status_bar_window_ctrls := []
 global carousel_status_bar_last_key := ""
 global carousel_status_bar_last_layout_key := ""
-global carousel_status_bar_refresh_timer := 0
 global carousel_status_bar_vd_listener_registered := false
 
 InitCarouselStatusBar() {
@@ -20,7 +19,6 @@ InitCarouselStatusBar() {
         return
     }
     EnsureCarouselStatusBarListener()
-    StartCarouselStatusBarRefreshTimer()
     CarouselStatusBarUpdate()
 }
 
@@ -34,24 +32,7 @@ EnsureCarouselStatusBarListener() {
     carousel_status_bar_vd_listener_registered := true
 }
 
-StartCarouselStatusBarRefreshTimer() {
-    global carousel_status_bar_refresh_timer
-    if !carousel_status_bar_refresh_timer
-        carousel_status_bar_refresh_timer := CarouselStatusBarRefreshTick
-    SetTimer(carousel_status_bar_refresh_timer, 500)
-}
-
-StopCarouselStatusBarRefreshTimer() {
-    global carousel_status_bar_refresh_timer
-    if carousel_status_bar_refresh_timer
-        SetTimer(carousel_status_bar_refresh_timer, 0)
-}
-
 CarouselStatusBarDesktopChanged(*) {
-    CarouselStatusBarUpdate()
-}
-
-CarouselStatusBarRefreshTick(*) {
     CarouselStatusBarUpdate()
 }
 
@@ -213,12 +194,21 @@ BuildCarouselStatusBarControls(model, settings) {
     desktop_label := carousel_status_bar_gui.AddText("xm ym", "Desktops:")
     carousel_status_bar_desktop_ctrls.Push(desktop_label)
 
+    max_desktop_digits := StrLen("" model["desktop_total"])
+    if (max_desktop_digits < 1)
+        max_desktop_digits := 1
+    ; Keep each desktop token wide enough for bracketed active state, e.g. [12].
+    desktop_token_chars := max_desktop_digits + 2
+    desktop_token_w := Round(font_size * desktop_token_chars * 0.7) + 10
+    if (desktop_token_w < 20)
+        desktop_token_w := 20
+
     is_first_desktop := true
     for _, cell in model["desktop_cells"] {
         token := cell["active"] ? ("[" cell["num"] "]") : cell["num"]
         color := cell["active"] ? active_color : text_color
         weight := cell["active"] ? "w700" : "w500"
-        opts := is_first_desktop ? "x+8 yp" : "x+6 yp"
+        opts := is_first_desktop ? "x+8 yp w" desktop_token_w " Center" : "x+4 yp w" desktop_token_w " Center"
         carousel_status_bar_gui.SetFont("s" font_size " " weight " c" color, "Segoe UI")
         desktop_token_ctrl := carousel_status_bar_gui.AddText(opts, token)
         carousel_status_bar_desktop_ctrls.Push(desktop_token_ctrl)
@@ -314,7 +304,6 @@ ShowCarouselStatusBarGui(settings) {
 DestroyCarouselStatusBar() {
     global carousel_status_bar_gui, carousel_status_bar_visible, carousel_status_bar_last_key, carousel_status_bar_last_layout_key
     global carousel_status_bar_desktop_ctrls, carousel_status_bar_window_ctrls
-    StopCarouselStatusBarRefreshTimer()
     if carousel_status_bar_gui {
         carousel_status_bar_gui.Destroy()
         carousel_status_bar_gui := ""

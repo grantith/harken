@@ -176,6 +176,11 @@ Carousel mode can show a persistent status bar (`modes.carousel.status_bar.enabl
 with desktop count/active desktop highlighting and the current desktop strip window titles.
 Status bar design inspiration: EngineeringMechanicsB's AHKVirtualDesktop project.
 
+Carousel mode also does best-effort persistence for per-app tile width and strip order.
+Order restore is keyed by `desktop:monitor` scope and app executable name, so it cannot
+distinguish multiple windows from the same executable across restarts, and restore quality
+can degrade when desktop indices or monitor numbering change.
+
 #### Window management (Move mode)
 
 | Shortcut | Action |
