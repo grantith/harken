@@ -293,6 +293,22 @@ width_increase_hotkey = "="
 toggle_follow_hotkey = "f"
 debug_enabled = false
 
+[modes.carousel.status_bar]
+enabled = true
+# top | bottom
+position = "top"
+height_px = 34
+# Reserve extra pixels so carousel tiles do not sit under the bar.
+reserve_gap_px = 4
+# 0-255
+opacity = 220
+background_color = "#181818"
+text_color = "#CCCCCC"
+active_color = "#A020F0"
+font_size = 10
+# Max title characters per window in strip preview.
+title_max_len = 26
+
 # -------------------------------------------------------------
 # Focus border
 # -------------------------------------------------------------

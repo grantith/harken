@@ -15,6 +15,7 @@ All notable changes to this project are documented here. This changelog is human
 - Optional `modes.carousel` mode with niri-like horizontal focus/move behavior scoped to current virtual desktop and active monitor.
 - Carousel mode desktop move follow toggle (`super+f`) and native overview shortcut (`super+o`).
 - Carousel mode width controls (`super+-` / `super+=`) and auto-maintained trailing empty desktop support.
+- Persistent carousel status bar with desktop count, active desktop highlight, and current strip window titles.
 
 ### Changed
 - Double-super now opens native Task View; move mode is entered from command mode, and h/j/k/l navigate Task View.

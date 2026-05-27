@@ -26,4 +26,5 @@ if CarouselModeEnabled() {
     SetTimer((*) => CarouselRelayout("startup"), -150)
     SetTimer(CarouselFocusWatcherTick, 250)
     SetTimer((*) => EnsureCarouselTrailingEmptyDesktop(), -600)
+    SetTimer((*) => InitCarouselStatusBar(), -200)
 }

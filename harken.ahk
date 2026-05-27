@@ -65,6 +65,7 @@ SetWinDelay(-1)
 #Include src/lib/window_manager.ahk
 #Include src/lib/directional_focus.ahk
 #Include src/lib/carousel_mode.ahk
+#Include src/lib/carousel_status_bar.ahk
 #Include src/lib/focus_border.ahk
 #Include src/lib/window_walker.ahk
 #Include src/hotkeys/global_hotkey.ahk
@@ -212,9 +213,21 @@ DefaultConfig() {
                 "center_hotkey", "Space",
                 "width_decrease_hotkey", "-",
                 "width_increase_hotkey", "=",
-                "toggle_follow_hotkey", "f",
-                "debug_enabled", false
-            )
+            "toggle_follow_hotkey", "f",
+            "status_bar", Map(
+                "enabled", true,
+                "position", "top",
+                "height_px", 34,
+                "reserve_gap_px", 4,
+                "opacity", 220,
+                "background_color", "#181818",
+                "text_color", "#CCCCCC",
+                "active_color", "#A020F0",
+                "font_size", 10,
+                "title_max_len", 26
+            ),
+            "debug_enabled", false
+        )
         ),
         "focus_border", Map(
             "enabled", true,

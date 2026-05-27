@@ -37,6 +37,7 @@ ToggleCarouselDesktopMoveFollow() {
     Config["modes"]["carousel"]["desktop_move_follows_focus"] := !current
     LogCarouselDebug("toggle_follow enabled=" (!current))
     UpdateCommandToastVisibility()
+    CarouselStatusBarUpdate()
 }
 
 CarouselOpenOverview(*) {
@@ -222,6 +223,7 @@ CarouselRelayout(reason := "general") {
 
     global carousel_last_relayout_tick
     carousel_last_relayout_tick := A_TickCount
+    CarouselStatusBarUpdate()
 }
 
 CarouselSwitchDesktop(delta) {
@@ -233,6 +235,7 @@ CarouselSwitchDesktop(delta) {
         return
     GoToRelativeDesktopFast(delta)
     ScheduleEnsureCarouselTrailingEmptyDesktop()
+    SetTimer((*) => CarouselStatusBarUpdate(), -80)
 }
 
 CarouselHandleDesktopKey(delta) {
@@ -254,6 +257,7 @@ CarouselMoveWindowDesktop(delta) {
     if !CarouselModeEnabled()
         return
     MoveWindowToRelativeDesktopWithFollow(delta, CarouselDesktopMoveFollowsFocus())
+    SetTimer((*) => CarouselStatusBarUpdate(), -80)
 }
 
 CarouselMoveCurrentDesktop(delta) {
@@ -284,6 +288,7 @@ CarouselMoveCurrentDesktop(delta) {
         LogCarouselDebug("desktop_reorder_failed current=" current " target=" target " err=" err.Message)
     }
     RefreshVirtualDesktopState()
+    CarouselStatusBarUpdate()
 }
 
 MoveWindowToRelativeDesktopWithFollow(delta, follow_desktop := true) {
@@ -305,6 +310,7 @@ MoveWindowToRelativeDesktopWithFollow(delta, follow_desktop := true) {
     }
     RefreshVirtualDesktopState()
     ScheduleEnsureCarouselTrailingEmptyDesktop()
+    CarouselStatusBarUpdate()
 }
 
 GoToRelativeDesktopFast(delta) {
@@ -338,6 +344,7 @@ CarouselFocusWatcherTick(*) {
     if (changed && IsOverviewActive()) {
         carousel_last_active_hwnd := hwnd
         carousel_last_scope_key := scope_key
+        CarouselStatusBarUpdate()
         return
     }
     ; Snap viewport to externally focused windows (Task View selection,
@@ -348,6 +355,8 @@ CarouselFocusWatcherTick(*) {
     }
     carousel_last_active_hwnd := hwnd
     carousel_last_scope_key := scope_key
+    if changed
+        CarouselStatusBarUpdate()
 }
 
 EnsureCarouselTrailingEmptyDesktop() {
@@ -571,6 +580,7 @@ GetCarouselMonitorMetrics(monitor_num) {
     MonitorGetWorkArea(monitor_num, &left, &top, &right, &bottom)
     left += Screen.left_margin
     top += Screen.top_margin
+    top += CarouselStatusBarReservedTopPx(monitor_num)
     right -= Screen.right_margin
     bottom -= Screen.bottom_margin
     width := right - left

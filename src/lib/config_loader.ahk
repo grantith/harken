@@ -209,6 +209,18 @@ ConfigSchema() {
                 "width_decrease_hotkey", "string",
                 "width_increase_hotkey", "string",
                 "toggle_follow_hotkey", "string",
+                "status_bar", Map(
+                    "enabled", "bool",
+                    "position", "string",
+                    "height_px", "number",
+                    "reserve_gap_px", "number",
+                    "opacity", "number",
+                    "background_color", "string",
+                    "text_color", "string",
+                    "active_color", "string",
+                    "font_size", "number",
+                    "title_max_len", "number"
+                ),
                 "debug_enabled", "bool"
             )
         ),

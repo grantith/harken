@@ -172,6 +172,10 @@ When `modes.active = "carousel"` and `modes.carousel.enabled = true`, these key 
 Carousel mode also maintains one trailing empty virtual desktop when
 `modes.carousel.ensure_empty_desktop = true`.
 
+Carousel mode can show a persistent status bar (`modes.carousel.status_bar.enabled = true`)
+with desktop count/active desktop highlighting and the current desktop strip window titles.
+Status bar design inspiration: EngineeringMechanicsB's AHKVirtualDesktop project.
+
 #### Window management (Move mode)
 
 | Shortcut | Action |
