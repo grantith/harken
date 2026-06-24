@@ -369,6 +369,7 @@ BuildCommandToastRows(key_width := 16) {
     rows := []
     rows.Push(Map("key", "Window", "desc", ""))
     rows.Push(Map("key", "super+arrows", "desc", "resize"))
+    rows.Push(Map("key", "super+alt+arrows", "desc", "resize center"))
     if CarouselModeEnabled() {
         rows.Push(Map("key", "super+h/l", "desc", "carousel focus"))
         rows.Push(Map("key", "super+shift+h/l", "desc", "carousel move"))
@@ -378,14 +379,20 @@ BuildCommandToastRows(key_width := 16) {
         if Config["modes"]["carousel"]["native_desktop_reorder"]
             rows.Push(Map("key", "super+ctrl+shift+j/k", "desc", "reorder current desktop"))
         rows.Push(Map("key", "super+- / =", "desc", "current tile width -/+"))
-        rows.Push(Map("key", "super+o", "desc", "native overview"))
         rows.Push(Map("key", "super+f", "desc", "toggle desktop move follow"))
     } else {
-        rows.Push(Map("key", "super+shift+h/j/k/l", "desc", "resize center"))
+        rows.Push(Map("key", "super+h/l", "desc", "focus left/right"))
+        rows.Push(Map("key", "super+[ / ]", "desc", "cycle stacked"))
+        rows.Push(Map("key", "super+j/k", "desc", "desktop next/prev"))
+        rows.Push(Map("key", "super+shift+j/k", "desc", "move desktop"))
+        rows.Push(Map("key", "super+u/i", "desc", "focus monitor prev/next"))
+        rows.Push(Map("key", "super+shift+u/i", "desc", "move monitor prev/next"))
     }
-    rows.Push(Map("key", "super+ctrl+h/j/k/l", "desc", "move"))
+    rows.Push(Map("key", "super+ctrl+h/j/k/l", "desc", "move/snap"))
     rows.Push(Map("key", "super+m", "desc", "maximize"))
-    rows.Push(Map("key", "double-super", "desc", "native overview"))
+    if Config["window"].Has("super_double_tap_action") && Config["window"]["super_double_tap_action"] = "overview"
+        rows.Push(Map("key", "double-super", "desc", "native overview"))
+    rows.Push(Map("key", "super+o", "desc", "native overview"))
     rows.Push(Map("key", "overview h/j/k/l", "desc", "navigate"))
     rows.Push(Map("key", "alt+-", "desc", "minimize"))
     rows.Push(Map("key", "alt+q", "desc", "close"))
@@ -397,11 +404,6 @@ BuildCommandToastRows(key_width := 16) {
     }
     if Config.Has("screen_search") && Config["screen_search"]["enabled"] {
         rows.Push(Map("key", "super+" Config["screen_search"]["hotkey"], "desc", "screen search"))
-    }
-    if Config.Has("directional_focus") && Config["directional_focus"]["enabled"] {
-        rows.Push(Map("key", "alt+h/l", "desc", "focus left/right"))
-        rows.Push(Map("key", "alt+j/k", "desc", "focus down/up"))
-        rows.Push(Map("key", "alt+[ / ]", "desc", "cycle stacked"))
     }
     rows.Push(Map("key", "", "desc", ""))
     rows.Push(Map("key", "Global Hotkeys", "desc", ""))

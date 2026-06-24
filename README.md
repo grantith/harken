@@ -40,7 +40,7 @@ Harken allows a keyboard-centered workflow on Windows: a single super modifier, 
 
 
 
-Launch-or-focus a program with `super + [letter]`, or directionally change window focus with `alt + h/l/j/k` (left, right, down, up) and `alt + [` / `alt + ]` for back/forward in a stack.
+Launch-or-focus a program with `super + [letter]`, or directionally change window focus with `super + h/l` (left/right) and `super + [` / `super + ]` for back/forward in a stack.
 ![Alt text](docs/assets/focus.gif)
 
 Cycle centered window widths with `super + spacebar`.
@@ -49,14 +49,16 @@ Cycle centered window widths with `super + spacebar`.
 Maximizes/restores with `super + m`.
 ![Alt text](docs/assets/maximize.gif)
 
-Move a window with `super + h/j/k/l`.
+Move a window with `super + ctrl + h/j/k/l`.
 ![Alt text](docs/assets/move.gif)
 
-Freely move a window with double tap super + h/j/k/l
+Freely move a window from command mode, then use h/j/k/l.
 ![Alt text](docs/assets/free-move.gif)
 
-Resize edges with `super + shift + h/j/k/l`.
+Resize edges with `super + arrows`.
 ![Alt text](docs/assets/resize.gif)
+
+Resize from the center with `super + alt + arrows`.
 
 Show the [Command Overlay](#command-overlay) when the super key is held. Disable through command mode.
 ![Alt text](docs/assets/command_overlay.png)
@@ -69,14 +71,13 @@ Other
 - `super + c` cycle through windows of the same app
 - `super + shift + c` cycle through windows of the same app on the current desktop
 - `super + .` screen search (click hints)
-- `super + alt + h/l` switch to previous/next virtual desktop
-- `super + alt + shift + h/l` move the active window to previous/next desktop (follow)
+- `super + j/k` switch to next/previous virtual desktop
+- `super + shift + j/k` move the active window to next/previous desktop (follow)
 - `super + w` open Window Selector (fuzzy find open windows)
-- `alt + h/l` move window focus left/right
-- `alt + j/k` move window focus down/up (non-stacked)
-- `alt + [` / `alt + ]` move window focus forward/back through stacked windows
-- `super + alt + h/l` to move between desktops
-- `super + shift + alt + h/l` send current tile to adjacent desktop
+- `super + h/l` move window focus left/right
+- `super + [` / `super + ]` move window focus forward/back through stacked windows
+- `super + u/i` focus previous/next monitor
+- `super + shift + u/i` move the active window to previous/next monitor
 
 Enter Command Mode with `super + ;`.
 - `r` to reload program/config
@@ -152,9 +153,12 @@ Add `debug = true` under `match.process_tree` to log process tree details to
 | `super + m` | Maximize/un-maximize |
 | `alt + q` | Close window |
 | `super + Left/Right/Up/Down` | Resize window and snap to grids |
-| `super + shift + h/j/k/l` | Resize centered |
-| `super + ctrl + h/j/k/l` | Move window |
-| `super` (double tap) | Toggle move mode |
+| `super + alt + Left/Right/Up/Down` | Resize centered |
+| `super + ctrl + h/j/k/l` | Move/snap window |
+| `super + u/i` | Focus previous/next monitor |
+| `super + shift + u/i` | Move window to previous/next monitor |
+| `super + o` | Open native Task View overview |
+| `window.super_double_tap_action = "overview"` | Optionally make double-super open native Task View overview |
 
 When `modes.active = "carousel"` and `modes.carousel.enabled = true`, these key behaviors change:
 
@@ -190,23 +194,23 @@ can degrade when desktop indices or monitor numbering change.
 | `h/j/k/l` | Move window |
 | `Esc` or `super` | Exit move mode |
 
-#### Focus navigation (Alt)
+#### Focus navigation
 
 | Shortcut | Action |
 | --- | --- |
-| `alt + h/l` | Focus left/right |
-| `alt + j/k` | Focus down/up |
-| `alt + [` / `alt + ]` | Cycle stacked (prev/next) |
+| `super + h/l` | Focus left/right |
+| `super + [` / `super + ]` | Cycle stacked (prev/next) |
 
 #### Virtual desktops
 
 | Shortcut | Action |
 | --- | --- |
-| `super + alt + h/l` | Previous/next desktop |
+| `super + j/k` | Next/previous desktop |
 | `super + WheelUp/WheelDown` | Previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
-| `super + alt + shift + h/l` | Move window to previous/next desktop (follow) |
+| `super + shift + j/k` | Move window to next/previous desktop (follow) |
 | `super + alt + shift + WheelUp/WheelDown` | Move window to previous/next desktop (when `virtual_desktop.scroll_switch = true`) |
-| `super + alt + <key>` | Go to mapped desktop (`[[virtual_desktop.<N>]]`) |
+| `super + <key>` | Go to mapped desktop (`[[virtual_desktop.<N>]]`) |
+| `super + alt + <key>` | Expel window to mapped desktop without following |
 | `super + alt + shift + <key>` | Move window to mapped desktop (follow) |
 | `virtual_desktop.fast_switch_non_carousel` | Skip the post-switch wait in non-carousel mode for faster desktop focus changes |
 | `virtual_desktop.ensure_trailing_empty` | Keep exactly one trailing empty virtual desktop by creating and pruning as needed |
@@ -312,7 +316,7 @@ GlazeWM is another popular tiling window manager for Windows operating systems.
 | --- | --- | --- | --- | --- |
 | Primary interaction model | Keyboard-first hotkeys and commands | Zone-based snapping (mouse + keyboard) | Dynamic tiling WM | Dynamic tiling WM |
 | Launch-or-focus app hotkeys | Yes (configurable per app) | No (outside scope) | Possible via external tooling/scripts | Possible via external tooling/scripts |
-| Directional focus movement | Yes (`alt + h/j/k/l`) | No | Yes | Yes |
+| Directional focus movement | Yes (`super + h/l`) | No | Yes | Yes |
 | Stack/window cycling | Yes (`super + [` / `super + ]`, app cycling) | Mostly | Yes (tiling containers/workspaces) | Yes (tiling containers/workspaces) |
 | Virtual desktop hotkeys | Yes (native desktop integration) | Indirect (PowerToys + Windows shortcuts) | Yes | Yes |
 | Freeform floating adjustments | Yes (move mode + resize controls) | Primarily zone snapping | Primarily tiling; floating is secondary | Primarily tiling; floating is secondary |

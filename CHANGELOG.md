@@ -16,9 +16,14 @@ All notable changes to this project are documented here. This changelog is human
 - Carousel mode desktop move follow toggle (`super+f`) and native overview shortcut (`super+o`).
 - Carousel mode width controls (`super+-` / `super+=`) and auto-maintained trailing empty desktop support.
 - Persistent carousel status bar with desktop count, active desktop highlight, and current strip window titles.
+- `[[virtual_desktop.N]]` desktop mappings now support `super+<key>` goto and `super+alt+<key>` no-follow window expel.
 
 ### Changed
-- Double-super now opens native Task View; move mode is entered from command mode, and h/j/k/l navigate Task View.
+- Default non-carousel hotkeys now follow a niri-like layout: `super+h/l` focus, `super+j/k` desktop navigation, `super+ctrl+h/j/k/l` window movement, and `super+shift+j/k` window-to-desktop moves.
+- Centered resize moved to `super+alt+arrows`; monitor focus/move now uses `super+u/i` and `super+shift+u/i`.
+- Legacy `super+alt+h/l` and `super+alt+shift+h/l` virtual desktop defaults are disabled, while config support remains.
+- Double-super overview is now disabled by default and can be restored with `window.super_double_tap_action = "overview"`.
+- Move mode is entered from command mode, and h/j/k/l navigate Task View.
 - Super+scroll switches virtual desktops (replacing the prior super+alt+scroll combo).
 - Config flow favors `config_watch` instead of a dedicated reload section.
 - Example config updates (apps list and focus border thickness).
@@ -37,6 +42,7 @@ All notable changes to this project are documented here. This changelog is human
 - Window cycling now includes more than two tiles reliably.
 - Grid snapping edge cases.
 - EnumWindows callback signature.
+- UI Automation no longer sets the Windows screen-reader flag, avoiding PowerShell PSReadLine warnings.
 
 ## [0.2.1] - 2026-02-07
 ### Added

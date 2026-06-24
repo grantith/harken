@@ -3,6 +3,7 @@ global Config
 resize_step := Config["window"]["resize_step"]
 move_step := Config["window"]["move_step"]
 super_double_tap_ms := Config["window"]["super_double_tap_ms"]
+super_double_tap_action := Config["window"].Has("super_double_tap_action") ? Config["window"]["super_double_tap_action"] : ""
 move_mode_enabled := Config["window"]["move_mode"]["enable"]
 move_mode_cancel_key := Config["window"]["move_mode"]["cancel_key"]
 ; Window hotkeys (resize/move/cycle) and virtual desktop bindings.
@@ -68,9 +69,6 @@ ResizeActiveWindow(delta_w, delta_h) {
 ResizeActiveWindowCentered(delta_w, delta_h) {
     hwnd := WinExist("A")
     if !hwnd || Window.IsException("ahk_id " hwnd)
-        return
-
-    if IsAltPressed() || AltPressedSoon()
         return
 
     if (WinGetMinMax("ahk_id " hwnd) = 1)
@@ -507,7 +505,7 @@ BuildCycleWindowList(exe, win_list) {
 }
 
 HandleSuperTap() {
-    global last_super_tap, super_double_tap_ms
+    global last_super_tap, super_double_tap_ms, super_double_tap_action
 
     if Window.IsMoveMode() {
         Window.SetMoveMode(false)
@@ -516,8 +514,8 @@ HandleSuperTap() {
     }
 
     if (A_TickCount - last_super_tap <= super_double_tap_ms) {
-        ; Use native overview instead of move mode (heuristic detects Task View state).
-        Send("#{Tab}")
+        if (super_double_tap_action = "overview")
+            Send("#{Tab}")
         UpdateCommandToastVisibility()
         last_super_tap := 0
         return
@@ -800,8 +798,7 @@ GoToRelativeDesktop(delta) {
     curtain_visible := BeginDesktopSwitchCurtain()
     try {
         VD.goToDesktopNum(target)
-        if !VirtualDesktopFastSwitchNonCarousel()
-            VD.WaitDesktopSwitched(target)
+        WaitRelativeDesktopSwitch(target)
     } finally {
         EndDesktopSwitchCurtain(curtain_visible)
     }
@@ -817,14 +814,23 @@ GoToDesktopNumber(desktop_num) {
     LogVirtualDesktopAction("goto_absolute target=" desktop_num " current=" GetCurrentDesktopNumFresh())
     curtain_visible := BeginDesktopSwitchCurtain()
     try {
+        EnsureDesktopExists(desktop_num)
         VD.goToDesktopNum(desktop_num)
-        if !VirtualDesktopFastSwitchNonCarousel()
-            VD.WaitDesktopSwitched(desktop_num)
+        WaitRelativeDesktopSwitch(desktop_num)
     } finally {
         EndDesktopSwitchCurtain(curtain_visible)
     }
     ScheduleEnsureVirtualDesktopTrailingEmpty()
     try ScheduleCarouselStatusBarUpdate(80)
+}
+
+WaitRelativeDesktopSwitch(target) {
+    if VirtualDesktopFastSwitchNonCarousel() {
+        ; Keep the new bindings responsive but do not return before VD state catches up.
+        VD.WaitDesktopSwitched(target, 250, 0)
+        return
+    }
+    VD.WaitDesktopSwitched(target)
 }
 
 MoveWindowToRelativeDesktop(delta) {
@@ -858,6 +864,7 @@ MoveWindowToDesktopNumber(desktop_num) {
     LogVirtualDesktopAction("move_absolute target=" desktop_num " current=" GetCurrentDesktopNumFresh())
     curtain_visible := BeginDesktopSwitchCurtain()
     try {
+        EnsureDesktopExists(desktop_num)
         VD.MoveWindowToDesktopNum("A", desktop_num, true)
         VD.WaitDesktopSwitched(desktop_num)
     } finally {
@@ -867,6 +874,34 @@ MoveWindowToDesktopNumber(desktop_num) {
     try ScheduleCarouselStatusBarUpdate(80)
 }
 
+MoveWindowToDesktopNumberNoFollow(desktop_num) {
+    if !VirtualDesktopEnabled()
+        return
+    if (desktop_num <= 0)
+        return
+    LogVirtualDesktopAction("move_absolute_no_follow target=" desktop_num " current=" GetCurrentDesktopNumFresh())
+    try {
+        EnsureDesktopExists(desktop_num)
+        VD.MoveWindowToDesktopNum("A", desktop_num, false)
+    }
+    ScheduleEnsureVirtualDesktopTrailingEmpty()
+    try ScheduleCarouselStatusBarUpdate(80)
+}
+
+EnsureDesktopExists(desktop_num) {
+    if !VirtualDesktopEnabled()
+        return false
+    if (desktop_num <= 0)
+        return false
+    RefreshVirtualDesktopState()
+    count := VD.getCount()
+    if (count >= desktop_num)
+        return false
+    VD.createUntil(desktop_num)
+    RefreshVirtualDesktopState()
+    return true
+}
+
 HotIf (*) => IsSuperKeyPressed() && !IsAltPressed()
 Hotkey("Left", (*) => ResizeActiveWindow(-resize_step, 0))
 Hotkey("Right", (*) => ResizeActiveWindow(resize_step, 0))
@@ -874,16 +909,13 @@ Hotkey("Up", (*) => ResizeActiveWindow(0, -resize_step))
 Hotkey("Down", (*) => ResizeActiveWindow(0, resize_step))
 if !CarouselModeEnabled() {
     Hotkey(center_cycle_hotkey, CenterWidthCycle)
-    Hotkey("+h", (*) => ResizeActiveWindowCentered(-resize_step, 0))
-    Hotkey("+l", (*) => ResizeActiveWindowCentered(resize_step, 0))
-    Hotkey("+j", (*) => ResizeActiveWindowCentered(0, -resize_step))
-    Hotkey("+k", (*) => ResizeActiveWindowCentered(0, resize_step))
 }
-Hotkey("^h", (*) => MoveActiveWindow(-move_step, 0))
-Hotkey("^l", (*) => MoveActiveWindow(move_step, 0))
-Hotkey("^j", (*) => MoveActiveWindow(0, move_step))
-Hotkey("^k", (*) => MoveActiveWindow(0, -move_step))
-HotIf IsSuperKeyPressed
+HotIf (*) => IsSuperKeyPressed() && IsAltPressed() && !GetKeyState("Ctrl", "P") && !GetKeyState("Shift", "P")
+Hotkey("*Left", (*) => ResizeActiveWindowCentered(-resize_step, 0))
+Hotkey("*Right", (*) => ResizeActiveWindowCentered(resize_step, 0))
+Hotkey("*Up", (*) => ResizeActiveWindowCentered(0, -resize_step))
+Hotkey("*Down", (*) => ResizeActiveWindowCentered(0, resize_step))
+HotIf (*) => IsSuperKeyPressed() && !IsAltPressed()
 Hotkey("m", ToggleMaximize)
 Hotkey(cycle_app_windows_hotkey, CycleAppWindows)
 if (cycle_app_windows_current_hotkey != "")
@@ -891,6 +923,40 @@ if (cycle_app_windows_current_hotkey != "")
 RegisterSuperComboHotkey("/", (*) => ShowCommandToastTemporary())
 if (minimize_others_hotkey != "")
     Hotkey(minimize_others_hotkey, MinimizeOtherWindows)
+if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
+    LogVirtualDesktopHotkeys("desktop_hotkeys_count=" vd_desktop_hotkeys.Length)
+    for _, entry in vd_desktop_hotkeys {
+        if !(entry is Map)
+            continue
+        if !entry.Has("hotkey") || !entry.Has("desktop")
+            continue
+        hotkey_name := entry["hotkey"]
+        desktop_num := entry["desktop"]
+        key_copy := hotkey_name
+        num_copy := desktop_num
+        if (key_copy != "") {
+            callback := GoToDesktopNumber.Bind(num_copy)
+            Hotkey(key_copy, (*) => (
+                IsAltPressed() || GetKeyState("Shift", "P") ? 0 : LogVirtualDesktopAction("goto_absolute_super hotkey=" key_copy " desktop=" num_copy " current=" GetCurrentDesktopNumFresh()),
+                IsAltPressed() || GetKeyState("Shift", "P") ? 0 : callback()
+            ))
+        }
+        LogVirtualDesktopHotkeys("map goto super hotkey=" key_copy " desktop=" num_copy)
+    }
+}
+HotIf
+
+HotIf (*) => IsSuperKeyPressed() && !IsAltPressed() && !GetKeyState("Ctrl", "P") && !GetKeyState("Shift", "P")
+Hotkey("j", (*) => GoToRelativeDesktop(1))
+Hotkey("k", (*) => GoToRelativeDesktop(-1))
+Hotkey("u", (*) => FocusRelativeMonitor(-1))
+Hotkey("i", (*) => FocusRelativeMonitor(1))
+Hotkey("o", (*) => Send("#{Tab}"))
+HotIf
+
+HotIf (*) => IsSuperKeyPressed() && !IsAltPressed() && !GetKeyState("Ctrl", "P") && GetKeyState("Shift", "P")
+Hotkey("j", (*) => MoveWindowToRelativeDesktop(1))
+Hotkey("k", (*) => MoveWindowToRelativeDesktop(-1))
 HotIf
 
 Hotkey("!q", CloseWindow)
@@ -921,24 +987,6 @@ for _, entry in vd_goto_hotkeys {
         RegisterDesktopHotkey("goto_absolute", key_copy, num_copy, callback)
     }
     LogVirtualDesktopHotkeys("map goto hotkey=" key_copy " desktop=" num_copy)
-}
-if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
-    LogVirtualDesktopHotkeys("desktop_hotkeys_count=" vd_desktop_hotkeys.Length)
-    for _, entry in vd_desktop_hotkeys {
-        if !(entry is Map)
-            continue
-        if !entry.Has("hotkey") || !entry.Has("desktop")
-            continue
-        hotkey_name := NormalizeAltHotkey(entry["hotkey"])
-        desktop_num := entry["desktop"]
-        key_copy := hotkey_name
-        num_copy := desktop_num
-        if (key_copy != "") {
-            callback := GoToDesktopNumber.Bind(num_copy)
-            RegisterDesktopHotkey("goto_absolute", key_copy, num_copy, callback)
-        }
-        LogVirtualDesktopHotkeys("map goto hotkey=" key_copy " desktop=" num_copy)
-    }
 }
 HotIf
 
@@ -978,6 +1026,27 @@ if (vd_scroll_switch) {
     ))
 }
 LogVirtualDesktopHotkeys("move_prev_hotkey=" vd_move_prev_hotkey " move_next_hotkey=" vd_move_next_hotkey)
+if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
+    LogVirtualDesktopHotkeys("desktop_hotkeys_count=" vd_desktop_hotkeys.Length)
+    for _, entry in vd_desktop_hotkeys {
+        if !(entry is Map)
+            continue
+        if !entry.Has("hotkey") || !entry.Has("desktop")
+            continue
+        hotkey_name := entry["hotkey"]
+        desktop_num := entry["desktop"]
+        key_copy := hotkey_name
+        num_copy := desktop_num
+        if (key_copy != "") {
+            callback := MoveWindowToDesktopNumberNoFollow.Bind(num_copy)
+            Hotkey(key_copy, (*) => (
+                !IsAltPressed() || GetKeyState("Shift", "P") ? 0 : LogVirtualDesktopAction("move_absolute_no_follow hotkey=" key_copy " desktop=" num_copy " current=" GetCurrentDesktopNumFresh()),
+                !IsAltPressed() || GetKeyState("Shift", "P") ? 0 : callback()
+            ))
+        }
+        LogVirtualDesktopHotkeys("map move no_follow hotkey=" key_copy " desktop=" num_copy)
+    }
+}
 for _, entry in vd_move_hotkeys {
     if !(entry is Map)
         continue
@@ -992,24 +1061,6 @@ for _, entry in vd_move_hotkeys {
         RegisterDesktopHotkey("move_absolute", key_copy, num_copy, callback)
     }
     LogVirtualDesktopHotkeys("map move hotkey=" key_copy " desktop=" num_copy)
-}
-if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
-    LogVirtualDesktopHotkeys("desktop_hotkeys_count=" vd_desktop_hotkeys.Length)
-    for _, entry in vd_desktop_hotkeys {
-        if !(entry is Map)
-            continue
-        if !entry.Has("hotkey") || !entry.Has("desktop")
-            continue
-        hotkey_name := NormalizeAltHotkey(entry["hotkey"], true)
-        desktop_num := entry["desktop"]
-        key_copy := hotkey_name
-        num_copy := desktop_num
-        if (key_copy != "") {
-            callback := MoveWindowToDesktopNumber.Bind(num_copy)
-            RegisterDesktopHotkey("move_absolute", key_copy, num_copy, callback)
-        }
-        LogVirtualDesktopHotkeys("map move hotkey=" key_copy " desktop=" num_copy)
-    }
 }
 HotIf
 
@@ -1129,4 +1180,54 @@ ActivateMostRecentWindow(exclude_hwnd := 0) {
         WinActivate "ahk_id " hwnd
         return
     }
+}
+
+FocusRelativeMonitor(delta) {
+    if (MonitorGetCount() < 2)
+        return
+
+    active_hwnd := WinExist("A")
+    active_monitor := active_hwnd ? Screen.FromWindow("ahk_id " active_hwnd) : MonitorGetPrimary()
+    target_monitor := ResolveRelativeMonitor(active_monitor, delta)
+    if (target_monitor = active_monitor)
+        return
+
+    for _, hwnd in WinGetList() {
+        if !IsFocusableMonitorWindow(hwnd)
+            continue
+        if (Screen.FromWindow("ahk_id " hwnd) != target_monitor)
+            continue
+        WinActivate "ahk_id " hwnd
+        return
+    }
+}
+
+ResolveRelativeMonitor(current_monitor, delta) {
+    count := MonitorGetCount()
+    if (count <= 1)
+        return current_monitor
+    if (current_monitor <= 0 || current_monitor > count)
+        current_monitor := MonitorGetPrimary()
+
+    target := current_monitor + delta
+    if (target < 1)
+        target := count
+    if (target > count)
+        target := 1
+    return target
+}
+
+IsFocusableMonitorWindow(hwnd) {
+    if !hwnd
+        return false
+    if Window.IsException("ahk_id " hwnd)
+        return false
+    if (WinGetMinMax("ahk_id " hwnd) = -1)
+        return false
+    ex_style := WinGetExStyle("ahk_id " hwnd)
+    if (ex_style & 0x80) || (ex_style & 0x8000000)
+        return false
+    if !(WinGetStyle("ahk_id " hwnd) & 0x10000000)
+        return false
+    return true
 }

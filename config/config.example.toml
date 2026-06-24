@@ -126,6 +126,8 @@ send_keys = "^{Tab}"
 resize_step = 20
 move_step = 20
 super_double_tap_ms = 300
+# "overview" opens native Task View; "" disables double-super.
+super_double_tap_action = ""
 
 # Cycle app windows across all desktops.
 cycle_app_windows_hotkey = "+c"
@@ -208,12 +210,12 @@ enabled = true
 # Show the desktop bar outside carousel mode too.
 show_in_non_carousel = false
 
-# Hotkey fields here use AHK syntax without super (super is implied).
-# Modifiers are applied by Harken (alt or alt+shift) for desktop actions.
-prev_hotkey = "h"
-next_hotkey = "l"
-move_prev_hotkey = "h"
-move_next_hotkey = "l"
+# Legacy super+alt desktop hotkeys are supported but disabled by default.
+# The default workspace model uses super+j/k and super+shift+j/k instead.
+prev_hotkey = ""
+next_hotkey = ""
+move_prev_hotkey = ""
+move_next_hotkey = ""
 
 # Debug logs write to %APPDATA%\harken when enabled.
 debug_cycle = false
@@ -227,6 +229,8 @@ tray_format = "{current}/{total}"
 # auto_assign = false
 # auto_assign_interval_ms = 500
 
+# Mapped desktop hotkeys use super+<key> for goto and super+alt+<key>
+# for quick no-follow moves.
 [[virtual_desktop.1]]
 hotkey = "1"
 

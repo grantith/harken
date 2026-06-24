@@ -13,7 +13,6 @@ class WindowWalker
     static visible := false
     static image_list := ""
     static icon_cache := Map()
-    static corner_radius := 8
     static last_monitor := ""
     static last_monitor_work_area_key := ""
     static excluded_exes := Map(
@@ -73,7 +72,7 @@ class WindowWalker
         if WindowWalker.gui
             return
 
-        WindowWalker.gui := Gui("+AlwaysOnTop +ToolWindow -Caption", "harken Window Selector")
+        WindowWalker.gui := Gui("+AlwaysOnTop +ToolWindow -Caption +Border", "harken Window Selector")
         WindowWalker.gui.MarginX := 12
         WindowWalker.gui.MarginY := 10
         WindowWalker.gui.SetFont("s10", "Segoe UI")
@@ -134,28 +133,6 @@ class WindowWalker
         pos_x := left + (right - left - w) / 2
         pos_y := top + (bottom - top - h) / 2
         WindowWalker.gui.Show("x" pos_x " y" pos_y)
-        ; Query final dimensions after positioning so rounded-corner clipping uses current
-        ; monitor scaling instead of stale dimensions captured from another monitor context.
-        WindowWalker.gui.GetPos(,, &w, &h)
-        WindowWalker.ApplyRoundedCorners(w, h)
-    }
-
-    static ApplyRoundedCorners(width := 0, height := 0)
-    {
-        if !WindowWalker.gui
-            return
-        ; Always refresh dimensions from the live window so the region is never based on stale
-        ; size values from a previous monitor/DPI context.
-        WindowWalker.gui.GetPos(,, &width, &height)
-
-        if (width <= 0 || height <= 0) {
-            ; Clear any old clip region instead of leaving the GUI content partially cropped.
-            try WinSetRegion(, WindowWalker.gui)
-            return
-        }
-
-        radius := WindowWalker.corner_radius
-        try WinSetRegion("0-0 w" width " h" height " r" radius "-" radius, WindowWalker.gui)
     }
 
     static StartFocusWatch()

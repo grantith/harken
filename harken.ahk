@@ -9,6 +9,8 @@
 #Include src/lib/virtual_desktop.ahk
 #Include src/lib/focus_or_run.ahk
 #Include src/lib/command_toast.ahk
+; Avoid advertising harken as a screen reader; PowerShell disables PSReadLine when this flag is set.
+IUIAutomationActivateScreenReader := 0
 #Include src/lib/UIA.ahk
 #Include src/lib/screen_search.ahk
 #Include src/lib/window_inspector.ahk
@@ -39,7 +41,7 @@ super_keys := Config["super_key"]
 if !(super_keys is Array)
     super_keys := [super_keys]
 
-RegisterSuperKeyHotkey("~", "", (*) => OnSuperKeyDown())
+RegisterSuperKeyDownHotkeys()
 if HasSuperKey("CapsLock")
     SetCapsLockState "AlwaysOff"
 
@@ -101,6 +103,7 @@ DefaultConfig() {
             "resize_step", 20,
             "move_step", 20,
             "super_double_tap_ms", 300,
+            "super_double_tap_action", "",
             "move_mode", Map(
                 "enable", true,
                 "cancel_key", "Esc"
@@ -162,10 +165,10 @@ DefaultConfig() {
                 "enabled", true,
                 "show_in_non_carousel", false
             ),
-            "prev_hotkey", "h",
-            "next_hotkey", "l",
-            "move_prev_hotkey", "h",
-            "move_next_hotkey", "l",
+            "prev_hotkey", "",
+            "next_hotkey", "",
+            "move_prev_hotkey", "",
+            "move_next_hotkey", "",
             "desktop_hotkeys", [],
             "goto_hotkeys", [],
             "move_hotkeys", [],
@@ -530,6 +533,15 @@ RegisterSuperKeyHotkey(prefix, suffix, callback) {
     global super_keys
     for _, key in super_keys
         Hotkey(prefix key suffix, callback)
+}
+
+RegisterSuperKeyDownHotkeys() {
+    global super_keys
+    for _, key in super_keys {
+        ; F24 is often used as a hardware-level Super key and should not leak to focused apps.
+        prefix := StrLower(key) = "f24" ? "*" : "~"
+        Hotkey(prefix key, (*) => OnSuperKeyDown())
+    }
 }
 
 RegisterSuperComboHotkey(hotkey_name, callback) {

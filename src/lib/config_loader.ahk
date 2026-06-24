@@ -84,6 +84,7 @@ ConfigSchema() {
             "resize_step", "number",
             "move_step", "number",
             "super_double_tap_ms", "number",
+            "super_double_tap_action", OptionalSpec("string"),
             "move_mode", Map(
                 "enable", "bool",
                 "cancel_key", "string"

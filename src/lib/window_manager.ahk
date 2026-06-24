@@ -47,8 +47,8 @@ class Window
     static __New()
     {
         HotIf (*) => IsSuperKeyPressed()
+            && GetKeyState('Ctrl', 'P')
             && !GetKeyState('Shift', 'P')
-            && !GetKeyState('Ctrl', 'P')
             && !GetKeyState('LAlt', 'P')
             && !GetKeyState('RAlt', 'P')
             && !CarouselModeEnabled()
@@ -57,10 +57,19 @@ class Window
         Hotkey('*h', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveLeft')))
         Hotkey('*j', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveDown')))
         Hotkey('*l', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveRight')))
-        Hotkey('*u', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveToPreviousMonitor')))
-        Hotkey('*o', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveToNextMonitor')))
         Hotkey('*n', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveToNearestPosition')))
         Hotkey('*m', ObjBindMethod(this, 'Maximize'))
+        HotIf
+
+        HotIf (*) => IsSuperKeyPressed()
+            && GetKeyState('Shift', 'P')
+            && !GetKeyState('Ctrl', 'P')
+            && !GetKeyState('LAlt', 'P')
+            && !GetKeyState('RAlt', 'P')
+            && !CarouselModeEnabled()
+            && !this.IsMoveMode()
+        Hotkey('*u', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveToPreviousMonitor')))
+        Hotkey('*i', ObjBindMethod(this, 'HotkeyCallback', ObjBindMethod(this, 'MoveToNextMonitor')))
         HotIf
 
         ; releasing modifier key destroys gui guides
