@@ -450,6 +450,35 @@ RegisterDesktopHotkey(kind, hotkey_name, desktop_num, callback) {
     ))
 }
 
+RegisterMappedDesktopHotkey(hotkey_name, desktop_num) {
+    if (hotkey_name = "")
+        return
+    RegisterSuperComboHotkey(hotkey_name, (*) => HandleMappedDesktopHotkey(hotkey_name, desktop_num))
+}
+
+HandleMappedDesktopHotkey(hotkey_name, desktop_num) {
+    alt_pressed := IsAltPressed()
+    shift_pressed := GetKeyState("Shift", "P")
+
+    if (alt_pressed && shift_pressed) {
+        LogVirtualDesktopAction("move_absolute hotkey=" hotkey_name " desktop=" desktop_num " current=" GetCurrentDesktopNumFresh())
+        MoveWindowToDesktopNumber(desktop_num)
+        return
+    }
+
+    if (alt_pressed) {
+        LogVirtualDesktopAction("move_absolute_no_follow hotkey=" hotkey_name " desktop=" desktop_num " current=" GetCurrentDesktopNumFresh())
+        MoveWindowToDesktopNumberNoFollow(desktop_num)
+        return
+    }
+
+    if (shift_pressed)
+        return
+
+    LogVirtualDesktopAction("goto_absolute_super hotkey=" hotkey_name " desktop=" desktop_num " current=" GetCurrentDesktopNumFresh())
+    GoToDesktopNumber(desktop_num)
+}
+
 GetCycleDebugDir() {
     appdata := EnvGet("APPDATA")
     if appdata
@@ -923,6 +952,8 @@ if (cycle_app_windows_current_hotkey != "")
 RegisterSuperComboHotkey("/", (*) => ShowCommandToastTemporary())
 if (minimize_others_hotkey != "")
     Hotkey(minimize_others_hotkey, MinimizeOtherWindows)
+HotIf
+
 if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
     LogVirtualDesktopHotkeys("desktop_hotkeys_count=" vd_desktop_hotkeys.Length)
     for _, entry in vd_desktop_hotkeys {
@@ -934,17 +965,10 @@ if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
         desktop_num := entry["desktop"]
         key_copy := hotkey_name
         num_copy := desktop_num
-        if (key_copy != "") {
-            callback := GoToDesktopNumber.Bind(num_copy)
-            Hotkey(key_copy, (*) => (
-                IsAltPressed() || GetKeyState("Shift", "P") ? 0 : LogVirtualDesktopAction("goto_absolute_super hotkey=" key_copy " desktop=" num_copy " current=" GetCurrentDesktopNumFresh()),
-                IsAltPressed() || GetKeyState("Shift", "P") ? 0 : callback()
-            ))
-        }
-        LogVirtualDesktopHotkeys("map goto super hotkey=" key_copy " desktop=" num_copy)
+        RegisterMappedDesktopHotkey(key_copy, num_copy)
+        LogVirtualDesktopHotkeys("map desktop hotkey=" key_copy " desktop=" num_copy)
     }
 }
-HotIf
 
 HotIf (*) => IsSuperKeyPressed() && !IsAltPressed() && !GetKeyState("Ctrl", "P") && !GetKeyState("Shift", "P")
 Hotkey("j", (*) => GoToRelativeDesktop(1))
@@ -1026,27 +1050,6 @@ if (vd_scroll_switch) {
     ))
 }
 LogVirtualDesktopHotkeys("move_prev_hotkey=" vd_move_prev_hotkey " move_next_hotkey=" vd_move_next_hotkey)
-if (vd_desktop_hotkeys is Array && vd_desktop_hotkeys.Length > 0) {
-    LogVirtualDesktopHotkeys("desktop_hotkeys_count=" vd_desktop_hotkeys.Length)
-    for _, entry in vd_desktop_hotkeys {
-        if !(entry is Map)
-            continue
-        if !entry.Has("hotkey") || !entry.Has("desktop")
-            continue
-        hotkey_name := entry["hotkey"]
-        desktop_num := entry["desktop"]
-        key_copy := hotkey_name
-        num_copy := desktop_num
-        if (key_copy != "") {
-            callback := MoveWindowToDesktopNumberNoFollow.Bind(num_copy)
-            Hotkey(key_copy, (*) => (
-                !IsAltPressed() || GetKeyState("Shift", "P") ? 0 : LogVirtualDesktopAction("move_absolute_no_follow hotkey=" key_copy " desktop=" num_copy " current=" GetCurrentDesktopNumFresh()),
-                !IsAltPressed() || GetKeyState("Shift", "P") ? 0 : callback()
-            ))
-        }
-        LogVirtualDesktopHotkeys("map move no_follow hotkey=" key_copy " desktop=" num_copy)
-    }
-}
 for _, entry in vd_move_hotkeys {
     if !(entry is Map)
         continue

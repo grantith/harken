@@ -38,6 +38,7 @@ All notable changes to this project are documented here. This changelog is human
 - Status bar enablement is now controlled globally from `virtual_desktop.status_bar`, with optional visibility in non-carousel mode.
 
 ### Fixed
+- Mapped desktop hotkeys now use true super-combo registration so `super+1/2/3/4/5` works with CapsLock/F24 super keys.
 - Window walker rendering issues when the resolution changes.
 - Window cycling now includes more than two tiles reliably.
 - Grid snapping edge cases.

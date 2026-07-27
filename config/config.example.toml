@@ -229,13 +229,22 @@ tray_format = "{current}/{total}"
 # auto_assign = false
 # auto_assign_interval_ms = 500
 
-# Mapped desktop hotkeys use super+<key> for goto and super+alt+<key>
-# for quick no-follow moves.
+# Mapped desktop hotkeys use super+<key> for goto, super+alt+<key>
+# for quick no-follow moves, and super+alt+shift+<key> to move and follow.
 [[virtual_desktop.1]]
 hotkey = "1"
 
 [[virtual_desktop.2]]
 hotkey = "2"
+
+[[virtual_desktop.3]]
+hotkey = "3"
+
+[[virtual_desktop.4]]
+hotkey = "4"
+
+[[virtual_desktop.5]]
+hotkey = "5"
 
 # -------------------------------------------------------------
 # Directional focus
