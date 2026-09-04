@@ -126,6 +126,8 @@ send_keys = "^{Tab}"
 resize_step = 20
 move_step = 20
 super_double_tap_ms = 300
+# "overview" opens native Task View; "" disables double-super.
+super_double_tap_action = ""
 
 # Cycle app windows across all desktops.
 cycle_app_windows_hotkey = "+c"
@@ -189,6 +191,8 @@ bottom = 5
 enabled = true
 switch_on_focus = true
 ensure_count = 0
+ensure_trailing_empty = true
+fast_switch_non_carousel = true
 cycle_prefer_current = true
 
 # Optional mouse wheel switching (super+wheel).
@@ -201,12 +205,17 @@ enabled = true
 opacity = 204
 color = "#202020"
 
-# Hotkey fields here use AHK syntax without super (super is implied).
-# Modifiers are applied by Harken (alt or alt+shift) for desktop actions.
-prev_hotkey = "h"
-next_hotkey = "l"
-move_prev_hotkey = "h"
-move_next_hotkey = "l"
+[virtual_desktop.status_bar]
+enabled = true
+# Show the desktop bar outside carousel mode too.
+show_in_non_carousel = false
+
+# Legacy super+alt desktop hotkeys are supported but disabled by default.
+# The default workspace model uses super+j/k and super+shift+j/k instead.
+prev_hotkey = ""
+next_hotkey = ""
+move_prev_hotkey = ""
+move_next_hotkey = ""
 
 # Debug logs write to %APPDATA%\harken when enabled.
 debug_cycle = false
@@ -220,11 +229,22 @@ tray_format = "{current}/{total}"
 # auto_assign = false
 # auto_assign_interval_ms = 500
 
+# Mapped desktop hotkeys use super+<key> for goto, super+alt+<key>
+# for quick no-follow moves, and super+alt+shift+<key> to move and follow.
 [[virtual_desktop.1]]
 hotkey = "1"
 
 [[virtual_desktop.2]]
 hotkey = "2"
+
+[[virtual_desktop.3]]
+hotkey = "3"
+
+[[virtual_desktop.4]]
+hotkey = "4"
+
+[[virtual_desktop.5]]
+hotkey = "5"
 
 # -------------------------------------------------------------
 # Directional focus
@@ -241,6 +261,74 @@ frontmost_guard_px = 200
 perpendicular_overlap_min = 0.2
 cross_monitor = false
 debug_enabled = false
+
+# -------------------------------------------------------------
+# Modes (optional)
+# -------------------------------------------------------------
+
+[modes]
+# "carousel" enables niri-like horizontal focus/move behavior.
+# Use "" to keep the default grid-oriented movement keys.
+active = ""
+
+[modes.carousel]
+enabled = false
+# niri-like default: do not auto-center on every focus change.
+# Use super+space to center the active tile on demand.
+auto_snap_center_on_focus = false
+center_width_ratio = 0.5
+side_width_ratio = 0.25
+width_step = 0.05
+gap_px = 12
+wrap_enabled = false
+include_minimized = false
+excluded_apps = ["PowerToys.PowerLauncher.exe"]
+# offscreen | stack_peek
+overflow_policy = "offscreen"
+# Keep tile sizes stable when focus changes.
+resize_on_focus = false
+# Skip tiny move/resize diffs to reduce jitter.
+layout_epsilon_px = 8
+# Keep focused tile away from hard viewport edges while scrolling.
+scroll_reveal_margin_px = 80
+ensure_empty_desktop = true
+# Experimental: use native Windows API to reorder desktop indices.
+native_desktop_reorder = false
+# super+shift+j/k move-to-desktop follows focus when true.
+desktop_move_follows_focus = true
+focus_left_hotkey = "h"
+focus_right_hotkey = "l"
+move_left_hotkey = "+h"
+move_right_hotkey = "+l"
+desktop_prev_hotkey = "k"
+desktop_next_hotkey = "j"
+desktop_move_prev_hotkey = "+k"
+desktop_move_next_hotkey = "+j"
+desktop_reorder_up_hotkey = "^+k"
+desktop_reorder_down_hotkey = "^+j"
+overview_hotkey = "o"
+center_hotkey = "Space"
+width_decrease_hotkey = "-"
+width_increase_hotkey = "="
+toggle_follow_hotkey = "f"
+debug_enabled = false
+
+[modes.carousel.status_bar]
+# top | bottom
+position = "top"
+height_px = 34
+# Reserve extra pixels so carousel tiles do not sit under the bar.
+reserve_gap_px = 4
+# 0-255
+opacity = 220
+background_color = "#181818"
+text_color = "#CCCCCC"
+active_color = "#A020F0"
+font_size = 10
+# Max title characters per window in strip preview.
+title_max_len = 26
+# title | icon
+window_display = "icon"
 
 # -------------------------------------------------------------
 # Focus border

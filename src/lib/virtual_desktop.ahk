@@ -173,9 +173,172 @@ InitVirtualDesktop() {
     ensure_count := Config["virtual_desktop"]["ensure_count"]
     if (ensure_count > 0)
         VD.createUntil(ensure_count)
+    SetTimer((*) => EnsureVirtualDesktopTrailingEmpty(), -500)
     InitVirtualDesktopTrayIndicator()
     InitVirtualDesktopAutoAssign()
     EnsureFocusDebugLogInit()
+}
+
+VirtualDesktopFastSwitchNonCarousel() {
+    global Config
+    if !VirtualDesktopEnabled()
+        return false
+    if !Config["virtual_desktop"].Has("fast_switch_non_carousel")
+        return false
+    return Config["virtual_desktop"]["fast_switch_non_carousel"]
+}
+
+VirtualDesktopTrailingEmptyEnabled() {
+    global Config
+    if !VirtualDesktopEnabled()
+        return false
+    if !Config["virtual_desktop"].Has("ensure_trailing_empty")
+        return false
+    return Config["virtual_desktop"]["ensure_trailing_empty"]
+}
+
+VirtualDesktopStatusBarEnabled() {
+    global Config
+    if !VirtualDesktopEnabled()
+        return false
+    if Config["virtual_desktop"].Has("status_bar") {
+        status_bar := Config["virtual_desktop"]["status_bar"]
+        if (status_bar is Map && status_bar.Has("enabled"))
+            return status_bar["enabled"]
+    }
+
+    ; Preserve existing user configs until they migrate to the global setting.
+    if Config.Has("modes") && (Config["modes"] is Map) && Config["modes"].Has("carousel") {
+        carousel := Config["modes"]["carousel"]
+        if (carousel is Map && carousel.Has("status_bar")) {
+            settings := carousel["status_bar"]
+            if (settings is Map && settings.Has("enabled"))
+                return settings["enabled"]
+        }
+    }
+    return false
+}
+
+VirtualDesktopStatusBarShowInNonCarousel() {
+    global Config
+    if !VirtualDesktopEnabled()
+        return false
+    if !Config["virtual_desktop"].Has("status_bar")
+        return false
+    status_bar := Config["virtual_desktop"]["status_bar"]
+    if !(status_bar is Map) || !status_bar.Has("show_in_non_carousel")
+        return false
+    return status_bar["show_in_non_carousel"]
+}
+
+VirtualDesktopStatusBarVisibleInCurrentMode() {
+    if !VirtualDesktopStatusBarEnabled()
+        return false
+    return CarouselModeEnabled() || VirtualDesktopStatusBarShowInNonCarousel()
+}
+
+global vd_trailing_empty_pending := false
+global vd_trailing_empty_signature := ""
+global vd_trailing_empty_stable_count := 0
+
+ScheduleEnsureVirtualDesktopTrailingEmpty(delay_ms := 700) {
+    global vd_trailing_empty_pending
+    if vd_trailing_empty_pending
+        return
+    vd_trailing_empty_pending := true
+    SetTimer(VirtualDesktopEnsureTrailingEmptyDeferredTick, -delay_ms)
+}
+
+VirtualDesktopEnsureTrailingEmptyDeferredTick(*) {
+    global vd_trailing_empty_pending
+    try EnsureVirtualDesktopTrailingEmpty()
+    vd_trailing_empty_pending := false
+}
+
+EnsureVirtualDesktopTrailingEmpty(force := false) {
+    global vd_trailing_empty_signature, vd_trailing_empty_stable_count
+    if !force && !VirtualDesktopTrailingEmptyEnabled()
+        return false
+
+    occupied := GetOccupiedDesktopSetAcrossDesktops()
+    highest_occupied := 0
+    for desktop_num, _ in occupied {
+        if (desktop_num > highest_occupied)
+            highest_occupied := desktop_num
+    }
+
+    desired := Max(1, highest_occupied + 1)
+    RefreshVirtualDesktopState()
+    count := VD.getCount()
+    changed := false
+    signature := BuildVirtualDesktopOccupancySignature(occupied, count)
+
+    if (signature = vd_trailing_empty_signature)
+        vd_trailing_empty_stable_count += 1
+    else {
+        vd_trailing_empty_signature := signature
+        vd_trailing_empty_stable_count := 1
+    }
+
+    if (count < desired) {
+        VD.createUntil(desired)
+        changed := true
+        RefreshVirtualDesktopState()
+        vd_trailing_empty_signature := ""
+        vd_trailing_empty_stable_count := 0
+        count := VD.getCount()
+    }
+
+    ; Deleting a desktop can merge its windows into the current desktop, so only
+    ; prune after repeated identical occupancy snapshots and only remove one
+    ; trailing desktop per pass.
+    if (count > desired) && !occupied.Has(count) && (vd_trailing_empty_stable_count >= 3) {
+        fallback_desktop := Max(1, count - 1)
+        try VD.removeDesktop(count, fallback_desktop)
+        changed := true
+        RefreshVirtualDesktopState()
+        vd_trailing_empty_signature := ""
+        vd_trailing_empty_stable_count := 0
+        ScheduleEnsureVirtualDesktopTrailingEmpty(1200)
+    }
+
+    if changed
+        try ScheduleCarouselStatusBarUpdate(80)
+    return changed
+}
+
+BuildVirtualDesktopOccupancySignature(occupied, count) {
+    desktop_nums := []
+    for desktop_num, _ in occupied
+        desktop_nums.Push(desktop_num)
+    if (desktop_nums.Length > 1)
+        desktop_nums.Sort()
+
+    signature := "count=" count "|occupied="
+    for _, desktop_num in desktop_nums
+        signature .= desktop_num ","
+    return signature
+}
+
+GetOccupiedDesktopSetAcrossDesktops() {
+    set := Map()
+    windows := GetWindowsAcrossDesktops()
+    for _, hwnd in windows {
+        if !WindowExistsAcrossDesktops(hwnd)
+            continue
+        if Window.IsException("ahk_id " hwnd)
+            continue
+        ex_style := 0
+        try ex_style := WinGetExStyle("ahk_id " hwnd)
+        catch
+            continue
+        if (ex_style & 0x80) || (ex_style & 0x8000000)
+            continue
+        desktop_num := GetWindowDesktopNum(hwnd)
+        if (desktop_num > 0)
+            set[desktop_num] := true
+    }
+    return set
 }
 
 InitVirtualDesktopAutoAssign() {

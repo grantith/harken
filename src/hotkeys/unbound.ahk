@@ -17,6 +17,25 @@ RegisterUnboundHotkeys() {
     AddUsedKey(used_keys, "o")
     AddUsedKey(used_keys, "n")
 
+    if CarouselModeEnabled() {
+        carousel := Config["modes"]["carousel"]
+        AddUsedKey(used_keys, carousel["focus_left_hotkey"])
+        AddUsedKey(used_keys, carousel["focus_right_hotkey"])
+        AddUsedKey(used_keys, carousel["move_left_hotkey"])
+        AddUsedKey(used_keys, carousel["move_right_hotkey"])
+        AddUsedKey(used_keys, carousel["desktop_prev_hotkey"])
+        AddUsedKey(used_keys, carousel["desktop_next_hotkey"])
+        AddUsedKey(used_keys, carousel["desktop_move_prev_hotkey"])
+        AddUsedKey(used_keys, carousel["desktop_move_next_hotkey"])
+        AddUsedKey(used_keys, carousel["desktop_reorder_up_hotkey"])
+        AddUsedKey(used_keys, carousel["desktop_reorder_down_hotkey"])
+        AddUsedKey(used_keys, carousel["overview_hotkey"])
+        AddUsedKey(used_keys, carousel["center_hotkey"])
+        AddUsedKey(used_keys, carousel["width_decrease_hotkey"])
+        AddUsedKey(used_keys, carousel["width_increase_hotkey"])
+        AddUsedKey(used_keys, carousel["toggle_follow_hotkey"])
+    }
+
     if Config.Has("screen_search") && Config["screen_search"]["enabled"]
         AddUsedKey(used_keys, Config["screen_search"]["hotkey"])
 

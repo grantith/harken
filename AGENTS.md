@@ -29,7 +29,7 @@ Single test / focused run:
   hotkeys, reload flow, and Command Overlay) or run targeted helper tools in `tools/`.
 - Focused validation (pick relevant items):
   - Launch `harken.ahk` with a clean config and verify: super hotkeys, window cycling, overlay.
-  - If virtual desktops touched: test `super+alt+h/l`, mapped desktop hotkeys, and tray indicator.
+  - If virtual desktops touched: test `super+j/k`, `super+shift+j/k`, mapped desktop hotkeys, and tray indicator.
 
 ## Code Style Guidelines
 

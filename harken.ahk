@@ -9,6 +9,8 @@
 #Include src/lib/virtual_desktop.ahk
 #Include src/lib/focus_or_run.ahk
 #Include src/lib/command_toast.ahk
+; Avoid advertising harken as a screen reader; PowerShell disables PSReadLine when this flag is set.
+IUIAutomationActivateScreenReader := 0
 #Include src/lib/UIA.ahk
 #Include src/lib/screen_search.ahk
 #Include src/lib/window_inspector.ahk
@@ -39,7 +41,7 @@ super_keys := Config["super_key"]
 if !(super_keys is Array)
     super_keys := [super_keys]
 
-RegisterSuperKeyHotkey("~", "", (*) => OnSuperKeyDown())
+RegisterSuperKeyDownHotkeys()
 if HasSuperKey("CapsLock")
     SetCapsLockState "AlwaysOff"
 
@@ -64,15 +66,20 @@ SetWinDelay(-1)
 
 #Include src/lib/window_manager.ahk
 #Include src/lib/directional_focus.ahk
+#Include src/lib/carousel_mode.ahk
+#Include src/lib/carousel_status_bar.ahk
 #Include src/lib/focus_border.ahk
 #Include src/lib/window_walker.ahk
 #Include src/hotkeys/global_hotkey.ahk
 #Include src/hotkeys/apps.ahk
 #Include src/hotkeys/window.ahk
+#Include src/hotkeys/carousel.ahk
 #Include src/hotkeys/directional_focus.ahk
 #Include src/hotkeys/window_walker.ahk
 #Include src/hotkeys/screen_search.ahk
 #Include src/hotkeys/unbound.ahk
+
+SetTimer((*) => InitCarouselStatusBar(), -200)
 
 DefaultConfig() {
     return Map(
@@ -96,6 +103,7 @@ DefaultConfig() {
             "resize_step", 20,
             "move_step", 20,
             "super_double_tap_ms", 300,
+            "super_double_tap_action", "",
             "move_mode", Map(
                 "enable", true,
                 "cancel_key", "Esc"
@@ -144,6 +152,8 @@ DefaultConfig() {
             "enabled", true,
             "switch_on_focus", true,
             "ensure_count", 0,
+            "ensure_trailing_empty", true,
+            "fast_switch_non_carousel", true,
             "cycle_prefer_current", true,
             "scroll_switch", false,
             "switch_curtain", Map(
@@ -151,10 +161,14 @@ DefaultConfig() {
                 "opacity", 204,
                 "color", "#202020"
             ),
-            "prev_hotkey", "h",
-            "next_hotkey", "l",
-            "move_prev_hotkey", "h",
-            "move_next_hotkey", "l",
+            "status_bar", Map(
+                "enabled", true,
+                "show_in_non_carousel", false
+            ),
+            "prev_hotkey", "",
+            "next_hotkey", "",
+            "move_prev_hotkey", "",
+            "move_next_hotkey", "",
             "desktop_hotkeys", [],
             "goto_hotkeys", [],
             "move_hotkeys", [],
@@ -176,6 +190,56 @@ DefaultConfig() {
             "perpendicular_overlap_min", 0.2,
             "cross_monitor", false,
             "debug_enabled", false
+        ),
+        "modes", Map(
+            "active", "",
+            "carousel", Map(
+                "enabled", false,
+                "auto_snap_center_on_focus", false,
+                "center_width_ratio", 0.5,
+                "side_width_ratio", 0.25,
+                "width_step", 0.05,
+                "gap_px", 12,
+                "wrap_enabled", false,
+                "include_minimized", false,
+                "excluded_apps", [],
+                "overflow_policy", "offscreen",
+                "resize_on_focus", false,
+                "layout_epsilon_px", 8,
+                "scroll_reveal_margin_px", 80,
+                "ensure_empty_desktop", true,
+                "native_desktop_reorder", false,
+                "desktop_move_follows_focus", true,
+                "focus_left_hotkey", "h",
+                "focus_right_hotkey", "l",
+                "move_left_hotkey", "+h",
+                "move_right_hotkey", "+l",
+                "desktop_prev_hotkey", "k",
+                "desktop_next_hotkey", "j",
+                "desktop_move_prev_hotkey", "+k",
+                "desktop_move_next_hotkey", "+j",
+                "desktop_reorder_up_hotkey", "^+k",
+                "desktop_reorder_down_hotkey", "^+j",
+                "overview_hotkey", "o",
+                "center_hotkey", "Space",
+                "width_decrease_hotkey", "-",
+                "width_increase_hotkey", "=",
+            "toggle_follow_hotkey", "f",
+            "status_bar", Map(
+                "enabled", true,
+                "position", "top",
+                "height_px", 34,
+                "reserve_gap_px", 4,
+                "opacity", 220,
+                "background_color", "#181818",
+                "text_color", "#CCCCCC",
+                "active_color", "#A020F0",
+                "font_size", 10,
+                "title_max_len", 26,
+                "window_display", "icon"
+            ),
+            "debug_enabled", false
+        )
         ),
         "focus_border", Map(
             "enabled", true,
@@ -469,6 +533,15 @@ RegisterSuperKeyHotkey(prefix, suffix, callback) {
     global super_keys
     for _, key in super_keys
         Hotkey(prefix key suffix, callback)
+}
+
+RegisterSuperKeyDownHotkeys() {
+    global super_keys
+    for _, key in super_keys {
+        ; F24 is often used as a hardware-level Super key and should not leak to focused apps.
+        prefix := StrLower(key) = "f24" ? "*" : "~"
+        Hotkey(prefix key, (*) => OnSuperKeyDown())
+    }
 }
 
 RegisterSuperComboHotkey(hotkey_name, callback) {
